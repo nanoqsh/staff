@@ -8,7 +8,7 @@ use {
         fs::{self, File},
         io,
         path::PathBuf,
-        process,
+        process::ExitCode,
     },
 };
 
@@ -23,7 +23,7 @@ struct Cli {
     verbose: bool,
 }
 
-fn main() {
+fn main() -> ExitCode {
     use crate::parser::Parameters;
 
     let Cli { filepath, verbose } = Cli::parse();
@@ -33,7 +33,7 @@ fn main() {
                 src
             } else {
                 eprintln!("failed to read file {path:?}");
-                process::exit(1);
+                return ExitCode::FAILURE;
             }
         }
         None => {
@@ -41,7 +41,7 @@ fn main() {
                 src
             } else {
                 eprintln!("failed to read stdin");
-                process::exit(1);
+                return ExitCode::FAILURE;
             }
         }
     };
@@ -56,7 +56,7 @@ fn main() {
         Ok(elements) => {
             let Ok(curr) = env::current_dir() else {
                 eprintln!("failed to get current directory");
-                process::exit(1);
+                return ExitCode::FAILURE;
             };
 
             for element in elements {
@@ -64,7 +64,7 @@ fn main() {
                 path.set_extension("json");
                 let Ok(file) = File::create(&path) else {
                     eprintln!("failed to open file {path:?}");
-                    process::exit(1);
+                    return ExitCode::FAILURE;
                 };
 
                 println!("write element to file {path:?}");
@@ -73,21 +73,27 @@ fn main() {
         }
         Err(err) => {
             eprintln!("error: {err}");
-            process::exit(1)
+            return ExitCode::FAILURE;
         }
     }
+
+    ExitCode::SUCCESS
 }
 
-fn pos([x, y, z]: [f32; 3]) -> [f32; 3] {
+fn pos(points: [f32; 3]) -> [f32; 3] {
     const DECIMALS: u32 = 4;
     const ACCURACY: u32 = u32::pow(10, DECIMALS);
 
     let a = ACCURACY as f32;
-    let x = (x * a).round() / a;
-    let y = (y * a).round() / a;
-    let z = (z * a).round() / a;
+    let update = |mut v: f32| {
+        if v == -0. {
+            v = 0.;
+        }
 
-    [x, y, z]
+        (v * a).round() / a
+    };
+
+    points.map(update)
 }
 
 fn map([u, v]: [f32; 2]) -> [f32; 2] {
