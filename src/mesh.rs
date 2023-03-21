@@ -15,19 +15,18 @@ pub(crate) struct Mesh {
 }
 
 impl Mesh {
-    pub fn from_verts(verts: &[Vert]) -> Result<Self, IndexOverflow> {
+    pub fn from_verts(verts: &[[Vert; 3]]) -> Result<Self, IndexOverflow> {
         Self::make_indices(verts)
     }
 
-    fn make_indices(verts: &[Vert]) -> Result<Self, IndexOverflow> {
+    fn make_indices(verts: &[[Vert; 3]]) -> Result<Self, IndexOverflow> {
         use std::collections::HashMap;
 
         let mut indxs_map = HashMap::with_capacity(verts.len() / 2);
         let mut new_verts = Vec::with_capacity(verts.len() / 2);
         let faces = verts
-            .chunks(3)
+            .iter()
             .map(|verts| {
-                let verts: [Vert; 3] = verts.try_into().expect("wrong vertices length");
                 verts.map(|vert| {
                     let new_index = indxs_map.len() as u16;
                     let &mut index = indxs_map.entry(vert).or_insert_with(|| {

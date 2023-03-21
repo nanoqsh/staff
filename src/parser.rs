@@ -1,6 +1,10 @@
 use {
     crate::mesh::{IndexOverflow, Mesh, Vert},
-    std::{array::TryFromSliceError, fmt},
+    std::{
+        fmt,
+        io::{self, Write},
+        iter,
+    },
 };
 
 pub(crate) struct Parameters<P, M> {
@@ -19,96 +23,46 @@ where
     P: Fn([f32; 3]) -> [f32; 3],
     M: Fn([f32; 2]) -> [f32; 2],
 {
-    use dae_parser::{
-        ArrayElement, Document, Geometry, GeometryElement, LocalMap, Primitive, Semantic,
-    };
+    use collada::{document::ColladaDocument, PrimitiveElement, TVertex, Vertex};
 
     let mut output = Vec::new();
 
-    let document: Document = src.parse().map_err(|_| Error::Document)?;
-    let LocalMap(geometry): LocalMap<Geometry> =
-        document.local_map().map_err(|_| Error::Geometry)?;
-
-    for (name, geom) in geometry {
+    let document = ColladaDocument::from_str(src).map_err(Error::Document)?;
+    let set = document.get_obj_set().ok_or(Error::Geometry)?;
+    for object in set.objects {
         if params.verbose {
-            println!("read {name}.. ");
+            println!("read {} .. ", object.name);
+            _ = io::stdout().flush();
         }
 
-        let GeometryElement::Mesh(mesh) = &geom.element else {
-            if params.verbose {
-                println!("skip");
-            }
+        let get_vert = |pi, ti| {
+            let Vertex { x, y, z } = object.vertices[pi];
+            let TVertex { x: u, y: v } = object.tex_vertices[ti];
 
-            continue;
+            Vert {
+                pos: (params.pos_fn)([x as f32, y as f32, z as f32]),
+                map: (params.map_fn)([u as f32, v as f32]),
+            }
         };
 
-        let mut positions = Vec::new();
-        let mut texture_map = Vec::new();
-
-        for source in &mesh.sources {
-            let count = source.accessor.count;
-            let stride = source.accessor.stride;
-
-            let id = source.id.as_deref().unwrap_or_default();
-            if params.verbose {
-                println!("    source {id}");
-            }
-
-            match &source.array {
-                Some(ArrayElement::Float(arr)) if id.ends_with("-positions") => {
-                    positions = Vec::with_capacity(count);
-                    for f in arr.chunks(stride) {
-                        positions.push(f.try_into()?);
-                    }
-                }
-                Some(ArrayElement::Float(arr)) if id.ends_with("-map-0") => {
-                    texture_map = Vec::with_capacity(count);
-                    for f in arr.chunks(stride) {
-                        texture_map.push(f.try_into()?);
-                    }
-                }
-                _ => {}
-            }
-        }
-
         let mut verts = vec![];
-        for element in &mesh.elements {
-            let Primitive::Triangles(ts) = element else {
-                continue;
-            };
+        for geometry in object.geometry {
+            for element in geometry.mesh {
+                let PrimitiveElement::Triangles(triangles) = element else {
+                    continue;
+                };
 
-            let stride = ts.inputs.len();
-
-            let mut offset_texcoord = 0;
-            let mut offset_vertex = 0;
-
-            for inp in &ts.inputs.inputs {
-                match inp.semantic {
-                    Semantic::TexCoord => offset_texcoord = inp.offset,
-                    Semantic::Vertex => offset_vertex = inp.offset,
-                    _ => {}
-                }
-            }
-
-            if let Some(data) = &ts.data.prim {
-                for n in data.as_ref().chunks(stride) {
-                    let index_texcoord = n[offset_texcoord as usize];
-                    let index_vertex = n[offset_vertex as usize];
-
-                    let pos = positions[index_vertex as usize];
-                    let map = texture_map[index_texcoord as usize];
-
-                    verts.push(Vert {
-                        pos: (params.pos_fn)(pos),
-                        map: (params.map_fn)(map),
-                    });
+                let pverts = triangles.vertices;
+                let tverts = triangles.tex_vertices.ok_or(Error::NoTextureMap)?;
+                for ((ap, bp, cp), (at, bt, ct)) in iter::zip(pverts, tverts) {
+                    verts.push([get_vert(ap, at), get_vert(bp, bt), get_vert(cp, ct)]);
                 }
             }
         }
 
         let mesh = Mesh::from_verts(&verts)?;
         output.push(Element {
-            name: name.to_owned(),
+            name: object.name,
             mesh,
         });
 
@@ -121,10 +75,10 @@ where
 }
 
 pub(crate) enum Error {
-    IndexOverflow(IndexOverflow),
-    TryFromSlice(TryFromSliceError),
-    Document,
+    Document(&'static str),
     Geometry,
+    NoTextureMap,
+    IndexOverflow(IndexOverflow),
 }
 
 impl From<IndexOverflow> for Error {
@@ -133,19 +87,13 @@ impl From<IndexOverflow> for Error {
     }
 }
 
-impl From<TryFromSliceError> for Error {
-    fn from(v: TryFromSliceError) -> Self {
-        Self::TryFromSlice(v)
-    }
-}
-
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::IndexOverflow(err) => write!(f, "{err}"),
-            Self::TryFromSlice(err) => write!(f, "{err}"),
-            Self::Document => write!(f, "failed to parse document"),
+            Self::Document(err) => write!(f, "failed to parse document: {err}"),
             Self::Geometry => write!(f, "failed to parse geometry"),
+            Self::NoTextureMap => write!(f, "the texture map not found"),
+            Self::IndexOverflow(err) => write!(f, "{err}"),
         }
     }
 }
