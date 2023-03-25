@@ -10,8 +10,8 @@ type Face = [u16; 3];
 
 #[derive(Serialize)]
 pub(crate) struct Mesh {
-    pub verts: Vec<Vert>,
-    pub faces: Vec<Face>,
+    verts: Vec<Vert>,
+    faces: Vec<Face>,
 }
 
 impl Mesh {

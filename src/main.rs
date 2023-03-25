@@ -1,5 +1,6 @@
 mod mesh;
 mod parser;
+mod skeleton;
 
 use {
     crate::parser::Error as ParseError,
@@ -14,7 +15,7 @@ use {
 };
 
 #[derive(Parser)]
-#[command(author, version, about, long_about = None)]
+#[command(version, about)]
 struct Cli {
     /// File to parse (stdin by default)
     filepath: Option<PathBuf>,
@@ -34,7 +35,7 @@ fn main() -> ExitCode {
 }
 
 fn run(Cli { filepath, verbose }: Cli) -> Result<(), Error> {
-    use crate::parser::Parameters;
+    use crate::parser::{Parameters, Value};
 
     let src = match filepath {
         Some(path) => fs::read_to_string(&path).map_err(|_| Error::ReadFile(path))?,
@@ -43,8 +44,8 @@ fn run(Cli { filepath, verbose }: Cli) -> Result<(), Error> {
 
     let params = Parameters {
         verbose,
-        pos_fn: pos,
-        map_fn: map,
+        pos_fn: &pos,
+        map_fn: &map,
     };
 
     let elements = parser::parse(params, &src).map_err(Error::Parse)?;
@@ -54,7 +55,10 @@ fn run(Cli { filepath, verbose }: Cli) -> Result<(), Error> {
         path.set_extension("json");
         println!("write element to file {path:?}");
         let file = File::create(&path).map_err(|_| Error::CreateFile(path))?;
-        serde_json::to_writer(file, &element.mesh).expect("serialize element");
+        match element.val {
+            Value::Mesh(mesh) => serde_json::to_writer(file, &mesh).expect("serialize element"),
+            Value::Skeleton(sk) => serde_json::to_writer(file, &sk).expect("serialize element"),
+        }
     }
 
     Ok(())
