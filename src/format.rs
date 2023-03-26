@@ -1,5 +1,8 @@
 use {
-    quick_xml::{events::BytesStart, Error as XmlError, Reader},
+    quick_xml::{
+        events::{self, BytesStart},
+        Error as XmlError, Reader,
+    },
     std::{
         borrow::Cow,
         fmt, mem,
@@ -39,8 +42,26 @@ pub(crate) struct Source {
     pub floats: Vec<f32>,
 }
 
-pub(crate) fn read<'a>(src: &'a str) -> Result<Document, Failed> {
-    use quick_xml::events::Event;
+pub(crate) fn read(src: &str) -> Result<Document, Failed> {
+    let mut reader = Reader::from_str(src);
+    read_from(&mut reader).map_err(|err| {
+        let mut pos = reader.buffer_position();
+        let mut line = 1;
+        for line_len in src.lines().map(str::len) {
+            match pos.checked_sub(line_len) {
+                Some(p) => pos = p,
+                None => break,
+            }
+
+            line += 1;
+        }
+
+        Failed { err, line }
+    })
+}
+
+fn read_from(reader: &mut Reader<&[u8]>) -> Result<Document, Error> {
+    use events::Event;
 
     let mut library_geometries = false;
     let mut doc = Document { geometry: vec![] };
@@ -48,7 +69,6 @@ pub(crate) fn read<'a>(src: &'a str) -> Result<Document, Failed> {
     let mut indxs = vec![];
     let mut inputs = vec![];
 
-    let mut reader = Reader::from_str(src);
     let mut stack = Vec::new();
     loop {
         match reader.read_event() {
@@ -56,22 +76,22 @@ pub(crate) fn read<'a>(src: &'a str) -> Result<Document, Failed> {
                 b"library_geometries" => library_geometries = true,
                 b"geometry" if library_geometries => {
                     stack.push(El::Geometry {
-                        id: e.get_attribute_as_string("id").into_failed(&reader)?,
-                        name: e.get_attribute_as_string("name").into_failed(&reader)?,
+                        id: e.get_attribute_as_string("id")?,
+                        name: e.get_attribute_as_string("name")?,
                     });
                 }
                 b"source" if library_geometries => {
                     stack.push(El::Source {
-                        id: e.get_attribute_as_string("id").into_failed(&reader)?,
+                        id: e.get_attribute_as_string("id")?,
                     });
                 }
                 b"float_array" if library_geometries => {
-                    let count = e.get_attribute_as_parsed("count").into_failed(&reader)?;
+                    let count = e.get_attribute_as_parsed("count")?;
                     let floats = Vec::with_capacity(count);
                     stack.push(El::FloatArray { floats });
                 }
                 b"triangles" if library_geometries => {
-                    let count = e.get_attribute_as_parsed("count").into_failed(&reader)?;
+                    let count = e.get_attribute_as_parsed("count")?;
                     let indxs = Vec::with_capacity(count);
                     stack.push(El::Triangles { indxs });
                 }
@@ -81,7 +101,7 @@ pub(crate) fn read<'a>(src: &'a str) -> Result<Document, Failed> {
                 b"library_geometries" => library_geometries = false,
                 b"geometry" if library_geometries => {
                     let Some(El::Geometry { id, name }) = stack.pop() else {
-                        return Err(Failed::new(Error::UnexpectedClosingTag("geometry".to_string()), &reader));
+                        return Err(Error::UnexpectedClosingTag("geometry".to_owned()));
                     };
 
                     doc.geometry.push(Geometry {
@@ -96,7 +116,7 @@ pub(crate) fn read<'a>(src: &'a str) -> Result<Document, Failed> {
                 }
                 b"source" if library_geometries => {
                     let Some(El::Source { id }) = stack.pop() else {
-                        return Err(Failed::new(Error::UnexpectedClosingTag("source".to_string()), &reader));
+                        return Err(Error::UnexpectedClosingTag("source".to_owned()));
                     };
 
                     if let Some(source) = sources.last_mut() {
@@ -105,7 +125,7 @@ pub(crate) fn read<'a>(src: &'a str) -> Result<Document, Failed> {
                 }
                 b"float_array" if library_geometries => {
                     let Some(El::FloatArray { floats }) = stack.pop() else {
-                        return Err(Failed::new(Error::UnexpectedClosingTag("float_array".to_string()), &reader));
+                        return Err(Error::UnexpectedClosingTag("float_array".to_owned()));
                     };
 
                     sources.push(Source {
@@ -115,7 +135,7 @@ pub(crate) fn read<'a>(src: &'a str) -> Result<Document, Failed> {
                 }
                 b"triangles" if library_geometries => {
                     let Some(El::Triangles { indxs: i }) = stack.pop() else {
-                        return Err(Failed::new(Error::UnexpectedClosingTag("triangles".to_string()), &reader));
+                        return Err(Error::UnexpectedClosingTag("triangles".to_owned()));
                     };
 
                     indxs = i;
@@ -128,43 +148,29 @@ pub(crate) fn read<'a>(src: &'a str) -> Result<Document, Failed> {
                 };
 
                 inputs.push(Input {
-                    source: e.get_attribute_as_string("source").into_failed(&reader)?,
-                    offset: e.get_attribute_as_parsed("offset").into_failed(&reader)?,
+                    source: e.get_attribute_as_string("source")?,
+                    offset: e.get_attribute_as_parsed("offset")?,
                 });
             }
             Ok(Event::Text(e)) => match stack.last_mut() {
                 Some(El::FloatArray { floats, .. }) => {
-                    let e = str::from_utf8(&e)
-                        .map_err(Into::into)
-                        .into_failed(&reader)?;
-
+                    let e = str::from_utf8(&e)?;
                     for f in e.split_whitespace() {
-                        let f = f
-                            .parse()
-                            .map_err(|_| Error::Parse(f.to_owned()))
-                            .into_failed(&reader)?;
-
+                        let f = f.parse().map_err(|_| Error::Parse(f.to_owned()))?;
                         floats.push(f);
                     }
                 }
                 Some(El::Triangles { indxs }) => {
-                    let e = str::from_utf8(&e)
-                        .map_err(Into::into)
-                        .into_failed(&reader)?;
-
+                    let e = str::from_utf8(&e)?;
                     for i in e.split_whitespace() {
-                        let i = i
-                            .parse()
-                            .map_err(|_| Error::Parse(i.to_owned()))
-                            .into_failed(&reader)?;
-
+                        let i = i.parse().map_err(|_| Error::Parse(i.to_owned()))?;
                         indxs.push(i);
                     }
                 }
                 _ => (),
             },
             Ok(Event::Eof) => break,
-            Err(err) => return Err(Failed::new(Error::XmlError(err), &reader)),
+            Err(err) => return Err(Error::XmlError(err)),
             _ => {}
         }
     }
@@ -173,22 +179,13 @@ pub(crate) fn read<'a>(src: &'a str) -> Result<Document, Failed> {
 }
 
 pub(crate) struct Failed {
-    err: Error,
-    pos: usize,
-}
-
-impl Failed {
-    fn new<R>(err: Error, reader: &Reader<R>) -> Self {
-        Self {
-            err,
-            pos: reader.buffer_position(),
-        }
-    }
+    pub err: Error,
+    pub line: usize,
 }
 
 impl fmt::Display for Failed {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} at position {}", self.err, self.pos)
+        write!(f, "{} at line {}", self.err, self.line)
     }
 }
 
@@ -216,23 +213,13 @@ impl From<FromUtf8Error> for Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::UnexpectedClosingTag(tag) => write!(f, "unexpected closing tag {tag}"),
-            Self::AttributeNotFound(attr) => write!(f, "the attribute {attr} not found"),
+            Self::UnexpectedClosingTag(tag) => write!(f, "unexpected closing tag {tag:?}"),
+            Self::AttributeNotFound(attr) => write!(f, "the attribute {attr:?} not found"),
             Self::Parse(s) => write!(f, "failed to parse {s:?} string"),
             Self::Utf8Error(err) => write!(f, "{err}"),
             Self::FromUtf8Error(err) => write!(f, "{err}"),
             Self::XmlError(err) => write!(f, "{err}"),
         }
-    }
-}
-
-trait IntoFailed<T> {
-    fn into_failed<R>(self, reader: &Reader<R>) -> Result<T, Failed>;
-}
-
-impl<T> IntoFailed<T> for Result<T, Error> {
-    fn into_failed<R>(self, reader: &Reader<R>) -> Result<T, Failed> {
-        self.map_err(|err| Failed::new(err, reader))
     }
 }
 
@@ -257,7 +244,7 @@ trait GetAttribute {
 
     fn get_attribute_as_string(&self, attr: &str) -> Result<String, Error> {
         let at = self.get_attribute(attr)?;
-        Ok(String::from_utf8(at.to_vec())?)
+        Ok(String::from_utf8(at.into_owned())?)
     }
 }
 
