@@ -2,17 +2,45 @@ use {
     quick_xml::{events::BytesStart, Error as XmlError, Reader},
     std::{
         borrow::Cow,
-        fmt,
+        fmt, mem,
         str::{self, FromStr, Utf8Error},
         string::FromUtf8Error,
     },
 };
 
+#[derive(Debug)]
+pub(crate) struct Document {
+    pub geometry: Vec<Geometry>,
+}
+
+#[derive(Debug)]
+pub(crate) struct Geometry {
+    pub id: String,
+    pub name: String,
+    pub sources: Vec<Source>,
+    pub triangles: Triangles,
+}
+
+#[derive(Debug)]
+pub(crate) struct Triangles {
+    pub indxs: Vec<u32>,
+    pub inputs: Vec<Input>,
+}
+
+#[derive(Debug)]
+pub(crate) struct Input {
+    pub source: String,
+    pub offset: usize,
+}
+
+#[derive(Debug)]
+pub(crate) struct Source {
+    pub id: String,
+    pub floats: Vec<f32>,
+}
+
 pub(crate) fn read<'a>(src: &'a str) -> Result<Document, Failed> {
-    use {
-        quick_xml::{events::Event, name::QName},
-        std::mem,
-    };
+    use quick_xml::events::Event;
 
     let mut library_geometries = false;
     let mut doc = Document { geometry: vec![] };
@@ -24,34 +52,34 @@ pub(crate) fn read<'a>(src: &'a str) -> Result<Document, Failed> {
     let mut stack = Vec::new();
     loop {
         match reader.read_event() {
-            Ok(Event::Start(e)) => match e.name() {
-                QName(b"library_geometries") => library_geometries = true,
-                QName(b"geometry") if library_geometries => {
+            Ok(Event::Start(e)) => match e.name().as_ref() {
+                b"library_geometries" => library_geometries = true,
+                b"geometry" if library_geometries => {
                     stack.push(El::Geometry {
                         id: e.get_attribute_as_string("id").into_failed(&reader)?,
                         name: e.get_attribute_as_string("name").into_failed(&reader)?,
                     });
                 }
-                QName(b"source") if library_geometries => {
+                b"source" if library_geometries => {
                     stack.push(El::Source {
                         id: e.get_attribute_as_string("id").into_failed(&reader)?,
                     });
                 }
-                QName(b"float_array") if library_geometries => {
+                b"float_array" if library_geometries => {
                     let count = e.get_attribute_as_parsed("count").into_failed(&reader)?;
                     let floats = Vec::with_capacity(count);
                     stack.push(El::FloatArray { floats });
                 }
-                QName(b"triangles") if library_geometries => {
+                b"triangles" if library_geometries => {
                     let count = e.get_attribute_as_parsed("count").into_failed(&reader)?;
                     let indxs = Vec::with_capacity(count);
                     stack.push(El::Triangles { indxs });
                 }
                 _ => {}
             },
-            Ok(Event::End(e)) => match e.name() {
-                QName(b"library_geometries") => library_geometries = false,
-                QName(b"geometry") if library_geometries => {
+            Ok(Event::End(e)) => match e.name().as_ref() {
+                b"library_geometries" => library_geometries = false,
+                b"geometry" if library_geometries => {
                     let Some(El::Geometry { id, name }) = stack.pop() else {
                         return Err(Failed::new(Error::UnexpectedClosingTag("geometry".to_string()), &reader));
                     };
@@ -66,7 +94,7 @@ pub(crate) fn read<'a>(src: &'a str) -> Result<Document, Failed> {
                         },
                     });
                 }
-                QName(b"source") if library_geometries => {
+                b"source" if library_geometries => {
                     let Some(El::Source { id }) = stack.pop() else {
                         return Err(Failed::new(Error::UnexpectedClosingTag("source".to_string()), &reader));
                     };
@@ -75,7 +103,7 @@ pub(crate) fn read<'a>(src: &'a str) -> Result<Document, Failed> {
                         source.id = id;
                     }
                 }
-                QName(b"float_array") if library_geometries => {
+                b"float_array" if library_geometries => {
                     let Some(El::FloatArray { floats }) = stack.pop() else {
                         return Err(Failed::new(Error::UnexpectedClosingTag("float_array".to_string()), &reader));
                     };
@@ -85,7 +113,7 @@ pub(crate) fn read<'a>(src: &'a str) -> Result<Document, Failed> {
                         floats,
                     });
                 }
-                QName(b"triangles") if library_geometries => {
+                b"triangles" if library_geometries => {
                     let Some(El::Triangles { indxs: i }) = stack.pop() else {
                         return Err(Failed::new(Error::UnexpectedClosingTag("triangles".to_string()), &reader));
                     };
@@ -206,37 +234,6 @@ impl<T> IntoFailed<T> for Result<T, Error> {
     fn into_failed<R>(self, reader: &Reader<R>) -> Result<T, Failed> {
         self.map_err(|err| Failed::new(err, reader))
     }
-}
-
-#[derive(Debug)]
-pub(crate) struct Document {
-    pub geometry: Vec<Geometry>,
-}
-
-#[derive(Debug)]
-pub(crate) struct Geometry {
-    pub id: String,
-    pub name: String,
-    pub sources: Vec<Source>,
-    pub triangles: Triangles,
-}
-
-#[derive(Debug)]
-pub(crate) struct Triangles {
-    pub indxs: Vec<u32>,
-    pub inputs: Vec<Input>,
-}
-
-#[derive(Debug)]
-pub(crate) struct Input {
-    pub source: String,
-    pub offset: usize,
-}
-
-#[derive(Debug)]
-pub(crate) struct Source {
-    pub id: String,
-    pub floats: Vec<f32>,
 }
 
 enum El {
