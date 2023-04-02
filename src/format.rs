@@ -18,6 +18,7 @@ pub(crate) struct Document {
 
 #[derive(Debug)]
 pub(crate) struct Geometry {
+    #[allow(dead_code)]
     pub id: String,
     pub name: String,
     pub sources: Vec<Source>,
@@ -44,7 +45,7 @@ pub(crate) struct Source {
 
 pub(crate) fn read(src: &str) -> Result<Document, Failed> {
     let mut reader = Reader::from_str(src);
-    read_from(&mut reader).map_err(|err| {
+    read_from_reader(&mut reader).map_err(|err| {
         let mut pos = reader.buffer_position();
         let mut line = 1;
         for line_len in src.lines().map(str::len) {
@@ -60,7 +61,7 @@ pub(crate) fn read(src: &str) -> Result<Document, Failed> {
     })
 }
 
-fn read_from(reader: &mut Reader<&[u8]>) -> Result<Document, Error> {
+fn read_from_reader(reader: &mut Reader<&[u8]>) -> Result<Document, Error> {
     use events::Event;
 
     let mut library_geometries = false;
@@ -167,7 +168,7 @@ fn read_from(reader: &mut Reader<&[u8]>) -> Result<Document, Error> {
                         indxs.push(i);
                     }
                 }
-                _ => (),
+                _ => {}
             },
             Ok(Event::Eof) => break,
             Err(err) => return Err(Error::XmlError(err)),

@@ -1,5 +1,6 @@
 use {
     crate::{
+        format::{read, Failed},
         mesh::{IndexOverflow, Mesh, Vert},
         skeleton::{Bone, Skeleton},
     },
@@ -27,10 +28,98 @@ pub(crate) enum Value {
 }
 
 pub(crate) fn parse(params: Parameters, src: &str) -> Result<Vec<Element>, Error> {
+    let mut output = Vec::new();
+    let document = read(src)?;
+
+    for geom in document.geometry {
+        if params.verbose {
+            println!("read {} .. ", geom.name);
+        }
+
+        let mut verts = Vec::new();
+        let mut positions_floats = None;
+        let mut map_floats = None;
+        for source in geom.sources {
+            if source.id.ends_with("-positions") {
+                positions_floats = Some(source.floats);
+            } else if source.id.ends_with("-map-0") {
+                map_floats = Some(source.floats);
+            }
+        }
+
+        let Some(positions_floats) = positions_floats else {
+            return Err(Error::NoSource);
+        };
+
+        let Some(map_floats) = map_floats else {
+            return Err(Error::NoSource);
+        };
+
+        let mut max_offset = 1;
+        let mut vertices_input = None;
+        let mut map_input = None;
+        for input in geom.triangles.inputs {
+            if input.source.ends_with("-vertices") {
+                vertices_input = Some(input.offset);
+            } else if input.source.ends_with("-map-0") {
+                map_input = Some(input.offset);
+            }
+
+            let offset = input.offset + 1;
+            if offset > max_offset {
+                max_offset = offset;
+            }
+        }
+
+        let Some(vertices_input) = vertices_input else {
+            return Err(Error::NoVertices);
+        };
+
+        let Some(map_input) = map_input else {
+            return Err(Error::NoTextureMap);
+        };
+
+        for index_chunk in geom.triangles.indxs.chunks(max_offset) {
+            let pos = *index_chunk.get(vertices_input).ok_or(Error::Index)? as usize;
+            let map = *index_chunk.get(map_input).ok_or(Error::Index)? as usize;
+
+            let pos_stride = pos * 3;
+            let x = *positions_floats.get(pos_stride).ok_or(Error::Index)?;
+            let y = *positions_floats.get(pos_stride + 1).ok_or(Error::Index)?;
+            let z = *positions_floats.get(pos_stride + 2).ok_or(Error::Index)?;
+            let map_stride = map * 2;
+            let u = *map_floats.get(map_stride).ok_or(Error::Index)?;
+            let v = *map_floats.get(map_stride + 1).ok_or(Error::Index)?;
+
+            verts.push(Vert {
+                pos: (params.pos_fn)([x, y, z]),
+                map: (params.map_fn)([u, v]),
+            });
+        }
+
+        let verts: Vec<_> = verts
+            .chunks_exact(3)
+            .map(|chunk| {
+                let [a, b, c]: [Vert; 3] = chunk.try_into().expect("chunks by 3");
+                [a, b, c]
+            })
+            .collect();
+
+        let mesh = Mesh::from_verts(&verts)?;
+        output.push(Element {
+            name: geom.name,
+            val: Value::Mesh(mesh),
+        });
+    }
+
+    Ok(output)
+}
+
+pub(crate) fn parse_(params: Parameters, src: &str) -> Result<Vec<Element>, Error> {
     use collada::document::ColladaDocument;
 
     let mut output = Vec::new();
-    let document = ColladaDocument::from_str(src).map_err(Error::Document)?;
+    let document = ColladaDocument::from_str(src).unwrap();
 
     if let Some(set) = document.get_obj_set() {
         output.append(&mut parse_objects(params, set)?);
@@ -128,9 +217,18 @@ fn parse_skeletons(params: Parameters, set: SkSet) -> Vec<Element> {
 }
 
 pub(crate) enum Error {
-    Document(&'static str),
+    Document(Failed),
+    NoSource,
+    NoVertices,
     NoTextureMap,
     IndexOverflow(IndexOverflow),
+    Index,
+}
+
+impl From<Failed> for Error {
+    fn from(v: Failed) -> Self {
+        Self::Document(v)
+    }
 }
 
 impl From<IndexOverflow> for Error {
@@ -143,8 +241,11 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Document(err) => write!(f, "failed to parse document: {err}"),
+            Self::NoSource => write!(f, "source not found"),
+            Self::NoVertices => write!(f, "vertices not found"),
             Self::NoTextureMap => write!(f, "the texture map not found"),
             Self::IndexOverflow(err) => write!(f, "{err}"),
+            Self::Index => write!(f, "wrong index"),
         }
     }
 }

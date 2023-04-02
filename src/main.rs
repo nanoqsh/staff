@@ -5,7 +5,7 @@ mod parser;
 mod skeleton;
 
 use {
-    crate::parser::Error as ParseError,
+    crate::parser::{Error as ParseError, Value},
     clap::Parser,
     std::{
         env, fmt,
@@ -44,34 +44,28 @@ fn run(Cli { filepath, verbose }: Cli) -> Result<(), Error> {
         None => io::read_to_string(io::stdin()).map_err(|_| Error::ReadStdin)?,
     };
 
-    let _params = Parameters {
+    let params = Parameters {
         verbose,
         pos_fn: &pos,
         map_fn: &map,
     };
 
-    match format::read(&src) {
-        Ok(doc) => println!("{doc:?}"),
-        Err(err) => eprintln!("{err}"),
+    let elements = parser::parse(params, &src).map_err(Error::Parse)?;
+    let curr = env::current_dir().map_err(|_| Error::CurrentDir)?;
+    for element in elements {
+        let mut path = curr.join(element.name);
+        path.set_extension("json");
+        println!("write element to file {path:?}");
+        let file = File::create(&path).map_err(|_| Error::CreateFile(path))?;
+        match element.val {
+            Value::Mesh(mesh) => serde_json::to_writer(file, &mesh).expect("serialize element"),
+            Value::Skeleton(sk) => serde_json::to_writer(file, &sk).expect("serialize element"),
+        }
     }
-
-    // let elements = parser::parse(params, &src).map_err(Error::Parse)?;
-    // let curr = env::current_dir().map_err(|_| Error::CurrentDir)?;
-    // for element in elements {
-    //     let mut path = curr.join(element.name);
-    //     path.set_extension("json");
-    //     println!("write element to file {path:?}");
-    //     let file = File::create(&path).map_err(|_| Error::CreateFile(path))?;
-    //     match element.val {
-    //         Value::Mesh(mesh) => serde_json::to_writer(file, &mesh).expect("serialize element"),
-    //         Value::Skeleton(sk) => serde_json::to_writer(file, &sk).expect("serialize element"),
-    //     }
-    // }
 
     Ok(())
 }
 
-#[allow(dead_code)]
 enum Error {
     ReadFile(PathBuf),
     ReadStdin,
