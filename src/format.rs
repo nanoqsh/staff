@@ -49,7 +49,7 @@ pub(crate) struct Node {
     pub name: String,
     pub ty: String,
     pub mat: Vec<f32>,
-    pub children: Vec<Node>,
+    pub children: Vec<Self>,
 }
 
 pub(crate) fn read(src: &str) -> Result<Document, Failed> {

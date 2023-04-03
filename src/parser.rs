@@ -1,16 +1,11 @@
-use std::collections::HashMap;
-
 use {
     crate::{
         format::{read, Failed, Node},
         mesh::{IndexOverflow, Mesh, Vert},
-        skeleton::{Bone, Skeleton},
+        skeleton::{Bone, Skeleton, ToManyBones},
     },
-    collada::ObjSet,
-    std::{fmt, iter},
+    std::fmt,
 };
-
-type SkSet = Vec<collada::Skeleton>;
 
 #[derive(Clone, Copy)]
 pub(crate) struct Parameters {
@@ -121,10 +116,10 @@ pub(crate) fn parse(params: Parameters, src: &str) -> Result<Vec<Element>, Error
         }
 
         let name = node.name.clone();
-        let mut bones = Bones::default();
-        visit_node(node, None, &mut bones)?;
+        let mut sk = Skeleton::default();
+        visit_node(node, None, &mut sk)?;
 
-        if bones.is_empty() {
+        if sk.is_empty() {
             if params.verbose {
                 println!("skipped {name}");
             }
@@ -134,14 +129,14 @@ pub(crate) fn parse(params: Parameters, src: &str) -> Result<Vec<Element>, Error
 
         output.push(Element {
             name,
-            val: Value::Skeleton(bones.into_skeleton()),
+            val: Value::Skeleton(sk),
         });
     }
 
     Ok(output)
 }
 
-fn visit_node(node: Node, parent: Option<&str>, bones: &mut Bones) -> Result<(), Error> {
+fn visit_node(node: Node, parent: Option<&str>, sk: &mut Skeleton) -> Result<(), Error> {
     use glam::Mat4;
 
     match node.ty.as_str() {
@@ -159,12 +154,13 @@ fn visit_node(node: Node, parent: Option<&str>, bones: &mut Bones) -> Result<(),
                 mat.to_scale_rotation_translation()
             };
 
-            bones.push(
+            sk.push(
                 node.name.clone(),
                 Bone {
+                    name: node.name.clone(),
                     pos: pos.into(),
                     rot: rot.into(),
-                    parent: parent.and_then(|name| bones.get(name)),
+                    parent: parent.and_then(|name| sk.get(name)),
                 },
             )?;
         }
@@ -172,143 +168,10 @@ fn visit_node(node: Node, parent: Option<&str>, bones: &mut Bones) -> Result<(),
     }
 
     for child in node.children {
-        visit_node(child, Some(&node.name), bones)?;
+        visit_node(child, Some(&node.name), sk)?;
     }
 
     Ok(())
-}
-
-#[derive(Default)]
-struct Bones {
-    bones: Vec<Bone>,
-    names: HashMap<String, u16>,
-}
-
-impl Bones {
-    fn into_skeleton(self) -> Skeleton {
-        Skeleton { bones: self.bones }
-    }
-
-    fn push(&mut self, name: String, bone: Bone) -> Result<(), Error> {
-        let id = self
-            .bones
-            .len()
-            .try_into()
-            .map_err(|_| Error::ToManyBones)?;
-
-        self.bones.push(bone);
-        self.names.insert(name, id);
-        Ok(())
-    }
-
-    fn is_empty(&self) -> bool {
-        self.bones.is_empty()
-    }
-
-    fn get(&self, name: &str) -> Option<u16> {
-        self.names.get(name).copied()
-    }
-}
-
-pub(crate) fn parse_(params: Parameters, src: &str) -> Result<Vec<Element>, Error> {
-    use collada::document::ColladaDocument;
-
-    let mut output = Vec::new();
-    let document = ColladaDocument::from_str(src).unwrap();
-
-    if let Some(set) = document.get_obj_set() {
-        output.append(&mut parse_objects(params, set)?);
-    }
-
-    if let Some(set) = document.get_skeletons() {
-        output.append(&mut parse_skeletons(params, set));
-    }
-
-    Ok(output)
-}
-
-fn parse_objects(params: Parameters, set: ObjSet) -> Result<Vec<Element>, Error> {
-    use collada::{PrimitiveElement, TVertex, Vertex};
-
-    let mut output = Vec::new();
-
-    for object in set.objects {
-        if params.verbose {
-            println!("read {} .. ", object.name);
-        }
-
-        let get_vert = |pi, ti| {
-            let Vertex { x, y, z } = object.vertices[pi];
-            let TVertex { x: u, y: v } = object.tex_vertices[ti];
-
-            Vert {
-                pos: (params.pos_fn)([x as f32, y as f32, z as f32]),
-                map: (params.map_fn)([u as f32, v as f32]),
-            }
-        };
-
-        let mut verts = vec![];
-        for geometry in object.geometry {
-            for element in geometry.mesh {
-                let PrimitiveElement::Triangles(triangles) = element else {
-                    continue;
-                };
-
-                let pverts = triangles.vertices;
-                let tverts = triangles.tex_vertices.ok_or(Error::NoTextureMap)?;
-                for ((ap, bp, cp), (at, bt, ct)) in iter::zip(pverts, tverts) {
-                    verts.push([get_vert(ap, at), get_vert(bp, bt), get_vert(cp, ct)]);
-                }
-            }
-        }
-
-        let mesh = Mesh::from_verts(&verts)?;
-        output.push(Element {
-            name: object.name,
-            val: Value::Mesh(mesh),
-        });
-    }
-
-    Ok(output)
-}
-
-fn parse_skeletons(params: Parameters, set: SkSet) -> Vec<Element> {
-    use glam::Mat4;
-
-    let mut output = Vec::new();
-
-    for skeleton in set {
-        if params.verbose {
-            println!("read skeleton .. ");
-        }
-
-        let mut bones = Vec::new();
-        for (mat, joint) in iter::zip(skeleton.bind_poses, skeleton.joints) {
-            let (_, rot, pos) = {
-                let mat = Mat4::from_cols_array_2d(&mat);
-                if mat.determinant() == 0. {
-                    let name = joint.name;
-                    eprintln!("failed to parse the bone {name} since it's determinant is zero");
-                    continue;
-                }
-
-                mat.to_scale_rotation_translation()
-            };
-
-            bones.push(Bone {
-                pos: pos.into(),
-                rot: rot.into(),
-                parent: (!joint.is_root()).then_some(joint.parent_index as u16),
-            });
-        }
-
-        output.push(Element {
-            name: "skeleton".to_owned(),
-            val: Value::Skeleton(Skeleton { bones }),
-        });
-    }
-
-    output
 }
 
 pub(crate) enum Error {
@@ -316,10 +179,10 @@ pub(crate) enum Error {
     NoSource,
     NoVertices,
     NoTextureMap,
-    IndexOverflow(IndexOverflow),
     Index,
     UndefinedNode(String),
-    ToManyBones,
+    IndexOverflow(IndexOverflow),
+    ToManyBones(ToManyBones),
 }
 
 impl From<Failed> for Error {
@@ -334,6 +197,12 @@ impl From<IndexOverflow> for Error {
     }
 }
 
+impl From<ToManyBones> for Error {
+    fn from(v: ToManyBones) -> Self {
+        Self::ToManyBones(v)
+    }
+}
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -341,10 +210,10 @@ impl fmt::Display for Error {
             Self::NoSource => write!(f, "source not found"),
             Self::NoVertices => write!(f, "vertices not found"),
             Self::NoTextureMap => write!(f, "the texture map not found"),
-            Self::IndexOverflow(err) => write!(f, "{err}"),
             Self::Index => write!(f, "wrong index"),
             Self::UndefinedNode(node) => write!(f, "undefined node {node}"),
-            Self::ToManyBones => write!(f, "to many bones"),
+            Self::IndexOverflow(err) => write!(f, "{err}"),
+            Self::ToManyBones(err) => write!(f, "{err}"),
         }
     }
 }
