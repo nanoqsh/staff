@@ -2,18 +2,11 @@ use {
     crate::{
         format::{read, Failed, Node},
         mesh::{IndexOverflow, Mesh, Vert},
+        params::{verbose, Parameters},
         skeleton::{Bone, Skeleton, ToManyBones},
     },
     std::fmt,
 };
-
-#[derive(Clone, Copy)]
-pub(crate) struct Parameters {
-    pub verbose: bool,
-    pub pos_fn: fn([f32; 3]) -> [f32; 3],
-    pub map_fn: fn([f32; 2]) -> [f32; 2],
-    pub rot_fn: fn([f32; 4]) -> [f32; 4],
-}
 
 pub(crate) struct Element {
     pub name: String,
@@ -25,14 +18,12 @@ pub(crate) enum Value {
     Skeleton(Skeleton),
 }
 
-pub(crate) fn parse(params: Parameters, src: &str) -> Result<Vec<Element>, Error> {
+pub(crate) fn parse(src: &str) -> Result<Vec<Element>, Error> {
     let mut output = Vec::new();
     let doc = read(src)?;
 
     for geom in doc.geometry {
-        if params.verbose {
-            println!("read {} ({}) .. ", geom.name, geom.id);
-        }
+        verbose!("read {} ({}) .. ", geom.name, geom.id);
 
         let mut verts = Vec::new();
         let mut positions_floats = None;
@@ -89,6 +80,7 @@ pub(crate) fn parse(params: Parameters, src: &str) -> Result<Vec<Element>, Error
             let u = *map_floats.get(map_stride).ok_or(Error::Index)?;
             let v = *map_floats.get(map_stride + 1).ok_or(Error::Index)?;
 
+            let params = Parameters::get();
             verts.push(Vert {
                 pos: (params.pos_fn)([x, y, z]),
                 map: (params.map_fn)([u, v]),
@@ -111,19 +103,14 @@ pub(crate) fn parse(params: Parameters, src: &str) -> Result<Vec<Element>, Error
     }
 
     for node in doc.nodes {
-        if params.verbose {
-            println!("read {} ({}) .. ", node.name, node.id);
-        }
+        verbose!("read {} ({}) .. ", node.name, node.id);
 
         let name = node.name.clone();
         let mut sk = Skeleton::default();
         visit_node(node, None, &mut sk)?;
 
         if sk.is_empty() {
-            if params.verbose {
-                println!("skipped {name}");
-            }
-
+            verbose!("skipped {name}");
             continue;
         }
 
@@ -154,12 +141,13 @@ fn visit_node(node: Node, parent: Option<&str>, sk: &mut Skeleton) -> Result<(),
                 mat.to_scale_rotation_translation()
             };
 
+            let params = Parameters::get();
             sk.push(
                 node.name.clone(),
                 Bone {
                     name: node.name.clone(),
-                    pos: pos.into(),
-                    rot: rot.into(),
+                    pos: (params.pos_fn)(pos.into()),
+                    rot: (params.rot_fn)(rot.into()),
                     parent: parent.and_then(|name| sk.get(name)),
                 },
             )?;

@@ -1,11 +1,14 @@
 mod format;
 mod mesh;
-#[allow(dead_code)]
+mod params;
 mod parser;
 mod skeleton;
 
 use {
-    crate::parser::{Error as ParseError, Value},
+    crate::{
+        params::Parameters,
+        parser::{Error as ParseError, Value},
+    },
     clap::Parser,
     std::{
         env, fmt,
@@ -37,21 +40,19 @@ fn main() -> ExitCode {
 }
 
 fn run(Cli { filepath, verbose }: Cli) -> Result<(), Error> {
-    use crate::parser::Parameters;
-
-    let params = Parameters {
+    Parameters::init(Parameters {
         verbose,
         pos_fn: pos,
         map_fn: map,
         rot_fn: rot,
-    };
+    });
 
     let src = match filepath {
         Some(path) => fs::read_to_string(&path).map_err(|_| Error::ReadFile(path))?,
         None => io::read_to_string(io::stdin()).map_err(|_| Error::ReadStdin)?,
     };
 
-    let elements = parser::parse(params, &src).map_err(Error::Parse)?;
+    let elements = parser::parse(&src).map_err(Error::Parse)?;
     let curr = env::current_dir().map_err(|_| Error::CurrentDir)?;
     for element in elements {
         let mut path = curr.join(element.name);

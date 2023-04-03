@@ -11,13 +11,11 @@ use {
     },
 };
 
-#[derive(Debug)]
 pub(crate) struct Document {
     pub geometry: Vec<Geometry>,
     pub nodes: Vec<Node>,
 }
 
-#[derive(Debug)]
 pub(crate) struct Geometry {
     pub id: String,
     pub name: String,
@@ -25,25 +23,21 @@ pub(crate) struct Geometry {
     pub triangles: Triangles,
 }
 
-#[derive(Debug)]
 pub(crate) struct Triangles {
     pub indxs: Vec<u32>,
     pub inputs: Vec<Input>,
 }
 
-#[derive(Debug)]
 pub(crate) struct Input {
     pub source: String,
     pub offset: usize,
 }
 
-#[derive(Debug)]
 pub(crate) struct Source {
     pub id: String,
     pub floats: Vec<f32>,
 }
 
-#[derive(Debug)]
 pub(crate) struct Node {
     pub id: String,
     pub name: String,
