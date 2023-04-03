@@ -14,11 +14,11 @@ use {
 #[derive(Debug)]
 pub(crate) struct Document {
     pub geometry: Vec<Geometry>,
+    pub nodes: Vec<Node>,
 }
 
 #[derive(Debug)]
 pub(crate) struct Geometry {
-    #[allow(dead_code)]
     pub id: String,
     pub name: String,
     pub sources: Vec<Source>,
@@ -43,6 +43,15 @@ pub(crate) struct Source {
     pub floats: Vec<f32>,
 }
 
+#[derive(Debug)]
+pub(crate) struct Node {
+    pub id: String,
+    pub name: String,
+    pub ty: String,
+    pub mat: Vec<f32>,
+    pub children: Vec<Node>,
+}
+
 pub(crate) fn read(src: &str) -> Result<Document, Failed> {
     let mut reader = Reader::from_str(src);
     read_from_reader(&mut reader).map_err(|err| {
@@ -64,8 +73,18 @@ pub(crate) fn read(src: &str) -> Result<Document, Failed> {
 fn read_from_reader(reader: &mut Reader<&[u8]>) -> Result<Document, Error> {
     use events::Event;
 
-    let mut library_geometries = false;
-    let mut doc = Document { geometry: vec![] };
+    enum Library {
+        None,
+        Geometries,
+        VisualScenes,
+    }
+
+    let mut library = Library::None;
+    let mut doc = Document {
+        geometry: vec![],
+        nodes: vec![],
+    };
+
     let mut sources = vec![];
     let mut indxs = vec![];
     let mut inputs = vec![];
@@ -74,72 +93,125 @@ fn read_from_reader(reader: &mut Reader<&[u8]>) -> Result<Document, Error> {
     loop {
         match reader.read_event() {
             Ok(Event::Start(e)) => match e.name().as_ref() {
-                b"library_geometries" => library_geometries = true,
-                b"geometry" if library_geometries => {
-                    stack.push(El::Geometry {
-                        id: e.get_attribute_as_string("id")?,
-                        name: e.get_attribute_as_string("name")?,
-                    });
+                b"library_geometries" => library = Library::Geometries,
+                b"library_visual_scenes" => library = Library::VisualScenes,
+                b"geometry" => {
+                    if let Library::Geometries = library {
+                        stack.push(El::Geometry {
+                            id: e.get_attribute_as_string("id")?,
+                            name: e.get_attribute_as_string("name")?,
+                        });
+                    }
                 }
-                b"source" if library_geometries => {
-                    stack.push(El::Source {
-                        id: e.get_attribute_as_string("id")?,
-                    });
+                b"source" => {
+                    if let Library::Geometries = library {
+                        stack.push(El::Source {
+                            id: e.get_attribute_as_string("id")?,
+                        });
+                    }
                 }
-                b"float_array" if library_geometries => {
-                    let count = e.get_attribute_as_parsed("count")?;
-                    let floats = Vec::with_capacity(count);
-                    stack.push(El::FloatArray { floats });
+                b"float_array" => {
+                    if let Library::Geometries = library {
+                        let count = e.get_attribute_as_parsed("count")?;
+                        let floats = Vec::with_capacity(count);
+                        stack.push(El::FloatArray { floats });
+                    }
                 }
-                b"triangles" if library_geometries => {
-                    let count = e.get_attribute_as_parsed("count")?;
-                    let indxs = Vec::with_capacity(count);
-                    stack.push(El::Triangles { indxs });
+                b"triangles" => {
+                    if let Library::Geometries = library {
+                        let count = e.get_attribute_as_parsed("count")?;
+                        let indxs = Vec::with_capacity(count);
+                        stack.push(El::Triangles { indxs });
+                    }
+                }
+                b"node" => {
+                    if let Library::VisualScenes = library {
+                        stack.push(El::Node(Node {
+                            id: e.get_attribute_as_string("id")?,
+                            name: e.get_attribute_as_string("name")?,
+                            ty: e.get_attribute_as_string("type")?,
+                            mat: vec![],
+                            children: vec![],
+                        }));
+                    }
+                }
+                b"matrix" => {
+                    if let Library::VisualScenes = library {
+                        stack.push(El::Mat);
+                    }
                 }
                 _ => {}
             },
             Ok(Event::End(e)) => match e.name().as_ref() {
-                b"library_geometries" => library_geometries = false,
-                b"geometry" if library_geometries => {
-                    let Some(El::Geometry { id, name }) = stack.pop() else {
-                        return Err(Error::UnexpectedClosingTag("geometry".to_owned()));
-                    };
+                b"library_geometries" | b"library_visual_scenes" => library = Library::None,
+                b"geometry" => {
+                    if let Library::Geometries = library {
+                        let Some(El::Geometry { id, name }) = stack.pop() else {
+                            return Err(Error::UnexpectedClosingTag("geometry".to_owned()));
+                        };
 
-                    doc.geometry.push(Geometry {
-                        id,
-                        name,
-                        sources: mem::take(&mut sources),
-                        triangles: Triangles {
-                            indxs: mem::take(&mut indxs),
-                            inputs: mem::take(&mut inputs),
-                        },
-                    });
-                }
-                b"source" if library_geometries => {
-                    let Some(El::Source { id }) = stack.pop() else {
-                        return Err(Error::UnexpectedClosingTag("source".to_owned()));
-                    };
-
-                    if let Some(source) = sources.last_mut() {
-                        source.id = id;
+                        doc.geometry.push(Geometry {
+                            id,
+                            name,
+                            sources: mem::take(&mut sources),
+                            triangles: Triangles {
+                                indxs: mem::take(&mut indxs),
+                                inputs: mem::take(&mut inputs),
+                            },
+                        });
                     }
                 }
-                b"float_array" if library_geometries => {
-                    let Some(El::FloatArray { floats }) = stack.pop() else {
-                        return Err(Error::UnexpectedClosingTag("float_array".to_owned()));
-                    };
+                b"source" => {
+                    if let Library::Geometries = library {
+                        let Some(El::Source { id }) = stack.pop() else {
+                            return Err(Error::UnexpectedClosingTag("source".to_owned()));
+                        };
 
-                    sources.push(Source {
-                        id: String::new(),
-                        floats,
-                    });
+                        if let Some(source) = sources.last_mut() {
+                            source.id = id;
+                        }
+                    }
                 }
-                b"triangles" if library_geometries => {
-                    let Some(El::Triangles { indxs: i }) = stack.pop() else {
-                        return Err(Error::UnexpectedClosingTag("triangles".to_owned()));
-                    };
+                b"float_array" => {
+                    if let Library::Geometries = library {
+                        let Some(El::FloatArray { floats }) = stack.pop() else {
+                            return Err(Error::UnexpectedClosingTag("float_array".to_owned()));
+                        };
 
-                    indxs = i;
+                        sources.push(Source {
+                            id: String::new(),
+                            floats,
+                        });
+                    }
+                }
+                b"triangles" => {
+                    if let Library::Geometries = library {
+                        let Some(El::Triangles { indxs: i }) = stack.pop() else {
+                            return Err(Error::UnexpectedClosingTag("triangles".to_owned()));
+                        };
+
+                        indxs = i;
+                    }
+                }
+                b"node" => {
+                    if let Library::VisualScenes = library {
+                        let Some(El::Node(node)) = stack.pop() else {
+                            return Err(Error::UnexpectedClosingTag("node".to_owned()));
+                        };
+
+                        if let Some(El::Node(Node { children, .. })) = stack.last_mut() {
+                            children.push(node);
+                        } else {
+                            doc.nodes.push(node);
+                        }
+                    }
+                }
+                b"matrix" => {
+                    if let Library::VisualScenes = library {
+                        let Some(El::Mat) = stack.pop() else {
+                            return Err(Error::UnexpectedClosingTag("matrix".to_owned()));
+                        };
+                    }
                 }
                 _ => {}
             },
@@ -168,6 +240,17 @@ fn read_from_reader(reader: &mut Reader<&[u8]>) -> Result<Document, Error> {
                         indxs.push(i);
                     }
                 }
+                Some(El::Mat) => {
+                    let Some(El::Node(Node { mat, .. })) = stack.iter_mut().rev().nth(1) else {
+                        return Err(Error::MatrixNotFound);
+                    };
+
+                    let e = str::from_utf8(&e)?;
+                    for f in e.split_whitespace() {
+                        let f = f.parse().map_err(|_| Error::Parse(f.to_owned()))?;
+                        mat.push(f);
+                    }
+                }
                 _ => {}
             },
             Ok(Event::Eof) => break,
@@ -192,6 +275,7 @@ impl fmt::Display for Failed {
 
 pub(crate) enum Error {
     UnexpectedClosingTag(String),
+    MatrixNotFound,
     AttributeNotFound(String),
     Parse(String),
     Utf8Error(Utf8Error),
@@ -215,6 +299,7 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::UnexpectedClosingTag(tag) => write!(f, "unexpected closing tag {tag:?}"),
+            Self::MatrixNotFound => write!(f, "matrix not found"),
             Self::AttributeNotFound(attr) => write!(f, "the attribute {attr:?} not found"),
             Self::Parse(s) => write!(f, "failed to parse {s:?} string"),
             Self::Utf8Error(err) => write!(f, "{err}"),
@@ -229,6 +314,8 @@ enum El {
     Source { id: String },
     FloatArray { floats: Vec<f32> },
     Triangles { indxs: Vec<u32> },
+    Node(Node),
+    Mat,
 }
 
 trait GetAttribute {

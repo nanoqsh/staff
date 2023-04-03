@@ -1,6 +1,8 @@
+use std::collections::HashMap;
+
 use {
     crate::{
-        format::{read, Failed},
+        format::{read, Failed, Node},
         mesh::{IndexOverflow, Mesh, Vert},
         skeleton::{Bone, Skeleton},
     },
@@ -11,10 +13,11 @@ use {
 type SkSet = Vec<collada::Skeleton>;
 
 #[derive(Clone, Copy)]
-pub(crate) struct Parameters<'a> {
+pub(crate) struct Parameters {
     pub verbose: bool,
-    pub pos_fn: &'a dyn Fn([f32; 3]) -> [f32; 3],
-    pub map_fn: &'a dyn Fn([f32; 2]) -> [f32; 2],
+    pub pos_fn: fn([f32; 3]) -> [f32; 3],
+    pub map_fn: fn([f32; 2]) -> [f32; 2],
+    pub rot_fn: fn([f32; 4]) -> [f32; 4],
 }
 
 pub(crate) struct Element {
@@ -29,11 +32,11 @@ pub(crate) enum Value {
 
 pub(crate) fn parse(params: Parameters, src: &str) -> Result<Vec<Element>, Error> {
     let mut output = Vec::new();
-    let document = read(src)?;
+    let doc = read(src)?;
 
-    for geom in document.geometry {
+    for geom in doc.geometry {
         if params.verbose {
-            println!("read {} .. ", geom.name);
+            println!("read {} ({}) .. ", geom.name, geom.id);
         }
 
         let mut verts = Vec::new();
@@ -99,9 +102,9 @@ pub(crate) fn parse(params: Parameters, src: &str) -> Result<Vec<Element>, Error
 
         let verts: Vec<_> = verts
             .chunks_exact(3)
-            .map(|chunk| {
-                let [a, b, c]: [Vert; 3] = chunk.try_into().expect("chunks by 3");
-                [a, b, c]
+            .map(|tri| match tri {
+                &[a, b, c] => [a, b, c],
+                _ => unreachable!(),
             })
             .collect();
 
@@ -112,7 +115,99 @@ pub(crate) fn parse(params: Parameters, src: &str) -> Result<Vec<Element>, Error
         });
     }
 
+    for node in doc.nodes {
+        if params.verbose {
+            println!("read {} ({}) .. ", node.name, node.id);
+        }
+
+        let name = node.name.clone();
+        let mut bones = Bones::default();
+        visit_node(node, None, &mut bones)?;
+
+        if bones.is_empty() {
+            if params.verbose {
+                println!("skipped {name}");
+            }
+
+            continue;
+        }
+
+        output.push(Element {
+            name,
+            val: Value::Skeleton(bones.into_skeleton()),
+        });
+    }
+
     Ok(output)
+}
+
+fn visit_node(node: Node, parent: Option<&str>, bones: &mut Bones) -> Result<(), Error> {
+    use glam::Mat4;
+
+    match node.ty.as_str() {
+        "NODE" => {}
+        "JOINT" => {
+            let (_, rot, pos) = {
+                let array = node.mat.try_into().map_err(|_| Error::Index)?;
+                let mat = Mat4::from_cols_array(&array);
+                if mat.determinant() == 0. {
+                    let name = node.name;
+                    eprintln!("failed to parse the bone {name} since it's determinant is zero");
+                    return Ok(());
+                }
+
+                mat.to_scale_rotation_translation()
+            };
+
+            bones.push(
+                node.name.clone(),
+                Bone {
+                    pos: pos.into(),
+                    rot: rot.into(),
+                    parent: parent.and_then(|name| bones.get(name)),
+                },
+            )?;
+        }
+        _ => return Err(Error::UndefinedNode(node.ty)),
+    }
+
+    for child in node.children {
+        visit_node(child, Some(&node.name), bones)?;
+    }
+
+    Ok(())
+}
+
+#[derive(Default)]
+struct Bones {
+    bones: Vec<Bone>,
+    names: HashMap<String, u16>,
+}
+
+impl Bones {
+    fn into_skeleton(self) -> Skeleton {
+        Skeleton { bones: self.bones }
+    }
+
+    fn push(&mut self, name: String, bone: Bone) -> Result<(), Error> {
+        let id = self
+            .bones
+            .len()
+            .try_into()
+            .map_err(|_| Error::ToManyBones)?;
+
+        self.bones.push(bone);
+        self.names.insert(name, id);
+        Ok(())
+    }
+
+    fn is_empty(&self) -> bool {
+        self.bones.is_empty()
+    }
+
+    fn get(&self, name: &str) -> Option<u16> {
+        self.names.get(name).copied()
+    }
 }
 
 pub(crate) fn parse_(params: Parameters, src: &str) -> Result<Vec<Element>, Error> {
@@ -223,6 +318,8 @@ pub(crate) enum Error {
     NoTextureMap,
     IndexOverflow(IndexOverflow),
     Index,
+    UndefinedNode(String),
+    ToManyBones,
 }
 
 impl From<Failed> for Error {
@@ -246,6 +343,8 @@ impl fmt::Display for Error {
             Self::NoTextureMap => write!(f, "the texture map not found"),
             Self::IndexOverflow(err) => write!(f, "{err}"),
             Self::Index => write!(f, "wrong index"),
+            Self::UndefinedNode(node) => write!(f, "undefined node {node}"),
+            Self::ToManyBones => write!(f, "to many bones"),
         }
     }
 }

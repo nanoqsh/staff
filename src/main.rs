@@ -39,15 +39,16 @@ fn main() -> ExitCode {
 fn run(Cli { filepath, verbose }: Cli) -> Result<(), Error> {
     use crate::parser::Parameters;
 
+    let params = Parameters {
+        verbose,
+        pos_fn: pos,
+        map_fn: map,
+        rot_fn: rot,
+    };
+
     let src = match filepath {
         Some(path) => fs::read_to_string(&path).map_err(|_| Error::ReadFile(path))?,
         None => io::read_to_string(io::stdin()).map_err(|_| Error::ReadStdin)?,
-    };
-
-    let params = Parameters {
-        verbose,
-        pos_fn: &pos,
-        map_fn: &map,
     };
 
     let elements = parser::parse(params, &src).map_err(Error::Parse)?;
@@ -87,21 +88,22 @@ impl fmt::Display for Error {
 }
 
 fn pos(points: [f32; 3]) -> [f32; 3] {
-    const DECIMALS: u32 = 4;
-    const ACCURACY: u32 = u32::pow(10, DECIMALS);
-
-    let a = ACCURACY as f32;
-    let update = |mut v: f32| {
-        if v == -0. {
-            v = 0.;
-        }
-
-        (v * a).round() / a
-    };
-
-    points.map(update)
+    points.map(update::<4>)
 }
 
 fn map([u, v]: [f32; 2]) -> [f32; 2] {
-    [u, 1. - v]
+    [u, 1. - v].map(update::<8>)
+}
+
+fn rot(points: [f32; 4]) -> [f32; 4] {
+    points.map(update::<6>)
+}
+
+fn update<const D: u32>(mut v: f32) -> f32 {
+    let a = u32::pow(10, D) as f32;
+    if v == -0. {
+        v = 0.;
+    }
+
+    (v * a).round() / a
 }
