@@ -131,7 +131,7 @@ fn visit_node(node: Node, parent: Option<&str>, sk: &mut Skeleton) -> Result<(),
         "JOINT" => {
             let (_, rot, pos) = {
                 let array = node.mat.try_into().map_err(|_| Error::Index)?;
-                let mat = Mat4::from_cols_array(&array);
+                let mat = Mat4::from_cols_array(&array).transpose();
                 if mat.determinant() == 0. {
                     let name = node.name;
                     eprintln!("failed to parse the bone {name} since it's determinant is zero");

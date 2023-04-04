@@ -100,11 +100,12 @@ fn rot(points: [f32; 4]) -> [f32; 4] {
     points.map(update::<6>)
 }
 
-fn update<const D: u32>(mut v: f32) -> f32 {
+fn update<const D: u32>(v: f32) -> f32 {
     let a = u32::pow(10, D) as f32;
+    let mut v = (v * a).round() / a;
     if v == -0. {
         v = 0.;
     }
 
-    (v * a).round() / a
+    v
 }
