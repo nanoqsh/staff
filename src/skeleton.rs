@@ -3,10 +3,10 @@ use {
     std::{collections::HashMap, fmt},
 };
 
-#[derive(Default, Serialize)]
+#[derive(Default, Clone, Serialize)]
+#[serde(into = "Vec<Bone>")]
 pub(crate) struct Skeleton {
     bones: Vec<Bone>,
-    #[serde(skip)]
     names: HashMap<String, u16>,
 }
 
@@ -28,6 +28,12 @@ impl Skeleton {
     }
 }
 
+impl From<Skeleton> for Vec<Bone> {
+    fn from(Skeleton { bones, .. }: Skeleton) -> Self {
+        bones
+    }
+}
+
 pub(crate) struct ToManyBones;
 
 impl fmt::Display for ToManyBones {
@@ -36,7 +42,7 @@ impl fmt::Display for ToManyBones {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub(crate) struct Bone {
     pub name: String,
     pub pos: [f32; 3],
