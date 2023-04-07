@@ -9,13 +9,13 @@ use {
 type Face = [u16; 3];
 
 #[derive(Serialize)]
-pub(crate) struct Mesh {
+pub struct Mesh {
     verts: Vec<Vert>,
     faces: Vec<Face>,
 }
 
 impl Mesh {
-    pub fn from_verts(verts: &[[Vert; 3]]) -> Result<Self, IndexOverflow> {
+    pub(crate) fn from_verts(verts: &[[Vert; 3]]) -> Result<Self, IndexOverflow> {
         Self::make_indices(verts)
     }
 
@@ -49,7 +49,7 @@ impl Mesh {
     }
 }
 
-pub(crate) struct IndexOverflow;
+pub struct IndexOverflow;
 
 impl fmt::Display for IndexOverflow {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

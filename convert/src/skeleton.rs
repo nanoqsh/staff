@@ -5,13 +5,13 @@ use {
 
 #[derive(Default, Clone, Serialize)]
 #[serde(into = "Vec<Bone>")]
-pub(crate) struct Skeleton {
+pub struct Skeleton {
     bones: Vec<Bone>,
     names: HashMap<String, u16>,
 }
 
 impl Skeleton {
-    pub fn push(&mut self, name: String, bone: Bone) -> Result<(), ToManyBones> {
+    pub(crate) fn push(&mut self, name: String, bone: Bone) -> Result<(), ToManyBones> {
         let id = self.bones.len().try_into().map_err(|_| ToManyBones)?;
         self.bones.push(bone);
         self.names.insert(name, id);
@@ -19,11 +19,11 @@ impl Skeleton {
         Ok(())
     }
 
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.bones.is_empty()
     }
 
-    pub fn get(&self, name: &str) -> Option<u16> {
+    pub(crate) fn get(&self, name: &str) -> Option<u16> {
         self.names.get(name).copied()
     }
 }
@@ -34,7 +34,7 @@ impl From<Skeleton> for Vec<Bone> {
     }
 }
 
-pub(crate) struct ToManyBones;
+pub struct ToManyBones;
 
 impl fmt::Display for ToManyBones {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

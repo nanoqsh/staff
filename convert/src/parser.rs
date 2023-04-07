@@ -8,17 +8,17 @@ use {
     std::fmt,
 };
 
-pub(crate) struct Element {
+pub struct Element {
     pub name: String,
     pub val: Value,
 }
 
-pub(crate) enum Value {
+pub enum Value {
     Mesh(Mesh),
     Skeleton(Skeleton),
 }
 
-pub(crate) fn parse(src: &str) -> Result<Vec<Element>, Error> {
+pub fn parse(src: &str) -> Result<Vec<Element>, Error> {
     let mut output = Vec::new();
     let doc = read(src)?;
 
@@ -162,7 +162,7 @@ fn visit_node(node: Node, parent: Option<&str>, sk: &mut Skeleton) -> Result<(),
     Ok(())
 }
 
-pub(crate) enum Error {
+pub enum Error {
     Document(Failed),
     NoSource,
     NoVertices,

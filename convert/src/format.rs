@@ -256,7 +256,7 @@ fn read_from_reader(reader: &mut Reader<&[u8]>) -> Result<Document, Error> {
     Ok(doc)
 }
 
-pub(crate) struct Failed {
+pub struct Failed {
     pub err: Error,
     pub line: usize,
 }
@@ -267,7 +267,7 @@ impl fmt::Display for Failed {
     }
 }
 
-pub(crate) enum Error {
+pub enum Error {
     UnexpectedClosingTag(String),
     MatrixNotFound,
     AttributeNotFound(String),
