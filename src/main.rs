@@ -47,15 +47,14 @@ fn run(cli: Cli) -> Result<(), Error> {
         None => io::read_to_string(io::stdin()).map_err(|_| Error::ReadStdin)?,
     };
 
-    let path = {
-        let mut path = env::current_dir().map_err(|_| Error::OutDir)?;
-        if let Some(outdir) = cli.outdir {
-            path.push(outdir);
-            fs::create_dir_all(&path).expect("create output directory");
-        }
+    let path = cli
+        .outdir
+        .or_else(|| env::current_dir().ok())
+        .ok_or(Error::OutDir)?;
 
-        path.canonicalize().map_err(|_| Error::OutDir)?
-    };
+    if !path.exists() {
+        fs::create_dir_all(&path).map_err(|_| Error::OutDir)?;
+    }
 
     let elements = convert::parse(&src).map_err(Error::Parse)?;
     for element in elements {

@@ -130,7 +130,7 @@ fn visit_node(node: Node, parent: Option<&str>, sk: &mut Skeleton) -> Result<(),
         "NODE" => {}
         "JOINT" => {
             let (_, rot, pos) = {
-                let array = node.mat.try_into().map_err(|_| Error::Index)?;
+                let array = node.mat.try_into().map_err(|_| Error::MatSize)?;
                 let mat = Mat4::from_cols_array(&array).transpose();
                 if mat.determinant() == 0. {
                     let name = node.name;
@@ -168,6 +168,7 @@ pub enum Error {
     NoVertices,
     NoTextureMap,
     Index,
+    MatSize,
     UndefinedNode(String),
     IndexOverflow(IndexOverflow),
     ToManyBones(ToManyBones),
@@ -199,6 +200,7 @@ impl fmt::Display for Error {
             Self::NoVertices => write!(f, "vertices not found"),
             Self::NoTextureMap => write!(f, "the texture map not found"),
             Self::Index => write!(f, "wrong index"),
+            Self::MatSize => write!(f, "wrong matrix size"),
             Self::UndefinedNode(node) => write!(f, "undefined node {node}"),
             Self::IndexOverflow(err) => write!(f, "{err}"),
             Self::ToManyBones(err) => write!(f, "{err}"),
