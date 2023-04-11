@@ -2,7 +2,7 @@
 name = "convert"
 version = "0.1.0"
 edition = "2021"
-description = "The dae format converter"
+description = "Dae format converter"
 
 [dependencies]
 glam = "0.23"

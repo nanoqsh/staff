@@ -63,9 +63,11 @@ fn run(cli: Cli) -> Result<(), Error> {
         println!("write element to file {path:?}");
         let file = File::create(&path).map_err(|_| Error::CreateFile(path))?;
         match element.val {
-            Value::Mesh(mesh) => serde_json::to_writer(file, &mesh).expect("serialize element"),
-            Value::Skeleton(sk) => serde_json::to_writer(file, &sk).expect("serialize element"),
+            Value::Mesh(mesh) => serde_json::to_writer(file, &mesh),
+            Value::Skeleton(sk) => serde_json::to_writer(file, &sk),
+            Value::Animation(_) => todo!("serialize animation"),
         }
+        .expect("serialize element");
     }
 
     Ok(())

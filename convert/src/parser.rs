@@ -1,5 +1,6 @@
 use {
     crate::{
+        animation::Animation,
         format::{read, Failed, Node},
         mesh::{IndexOverflow, Mesh, Vert},
         params::{verbose, Parameters},
@@ -16,6 +17,7 @@ pub struct Element {
 pub enum Value {
     Mesh(Mesh),
     Skeleton(Skeleton),
+    Animation(Animation),
 }
 
 pub fn parse(src: &str) -> Result<Vec<Element>, Error> {
@@ -118,6 +120,11 @@ pub fn parse(src: &str) -> Result<Vec<Element>, Error> {
             name,
             val: Value::Skeleton(sk),
         });
+    }
+
+    for anim in doc.animations {
+        verbose!("read {} ({}) .. ", anim.name, anim.id);
+        todo!()
     }
 
     Ok(output)

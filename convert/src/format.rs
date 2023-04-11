@@ -11,9 +11,11 @@ use {
     },
 };
 
+#[derive(Default)]
 pub(crate) struct Document {
     pub geometry: Vec<Geometry>,
     pub nodes: Vec<Node>,
+    pub animations: Vec<Animation>,
 }
 
 pub(crate) struct Geometry {
@@ -36,6 +38,7 @@ pub(crate) struct Input {
 pub(crate) struct Source {
     pub id: String,
     pub floats: Vec<f32>,
+    pub names: Vec<Name>,
 }
 
 pub(crate) struct Node {
@@ -44,6 +47,27 @@ pub(crate) struct Node {
     pub ty: String,
     pub mat: Vec<f32>,
     pub children: Vec<Self>,
+}
+
+pub(crate) struct Animation {
+    pub id: String,
+    pub name: String,
+    pub sources: Vec<Source>,
+}
+
+pub(crate) enum Name {
+    Linear,
+    Bezier,
+}
+
+impl Name {
+    fn from_str(s: &str) -> Result<Self, Error> {
+        match s {
+            "LINEAR" => Ok(Self::Linear),
+            "BEZIER" => Ok(Self::Bezier),
+            _ => Err(Error::Name(s.to_owned())),
+        }
+    }
 }
 
 pub(crate) fn read(src: &str) -> Result<Document, Failed> {
@@ -71,24 +95,23 @@ fn read_from_reader(reader: &mut Reader<&[u8]>) -> Result<Document, Error> {
         None,
         Geometries,
         VisualScenes,
+        Animations,
     }
 
     let mut library = Library::None;
-    let mut doc = Document {
-        geometry: vec![],
-        nodes: vec![],
-    };
+    let mut doc = Document::default();
 
     let mut sources = vec![];
     let mut indxs = vec![];
     let mut inputs = vec![];
 
-    let mut stack = Vec::new();
+    let mut stack = vec![];
     loop {
         match reader.read_event() {
             Ok(Event::Start(e)) => match e.name().as_ref() {
                 b"library_geometries" => library = Library::Geometries,
                 b"library_visual_scenes" => library = Library::VisualScenes,
+                b"library_animations" => library = Library::Animations,
                 b"geometry" => {
                     if let Library::Geometries = library {
                         stack.push(El::Geometry {
@@ -98,17 +121,24 @@ fn read_from_reader(reader: &mut Reader<&[u8]>) -> Result<Document, Error> {
                     }
                 }
                 b"source" => {
-                    if let Library::Geometries = library {
+                    if let Library::Geometries | Library::Animations = library {
                         stack.push(El::Source {
                             id: e.get_attribute_as_string("id")?,
                         });
                     }
                 }
                 b"float_array" => {
-                    if let Library::Geometries = library {
+                    if let Library::Geometries | Library::Animations = library {
                         let count = e.get_attribute_as_parsed("count")?;
                         let floats = Vec::with_capacity(count);
                         stack.push(El::FloatArray { floats });
+                    }
+                }
+                b"Name_array" => {
+                    if let Library::Animations = library {
+                        let count = e.get_attribute_as_parsed("count")?;
+                        let names = Vec::with_capacity(count);
+                        stack.push(El::NameArray { names });
                     }
                 }
                 b"triangles" => {
@@ -134,10 +164,20 @@ fn read_from_reader(reader: &mut Reader<&[u8]>) -> Result<Document, Error> {
                         stack.push(El::Mat);
                     }
                 }
+                b"animation" => {
+                    if let Library::Animations = library {
+                        stack.push(El::Animation {
+                            id: e.get_attribute_as_string("id")?,
+                            name: e.get_attribute_as_string("name")?,
+                        });
+                    }
+                }
                 _ => {}
             },
             Ok(Event::End(e)) => match e.name().as_ref() {
-                b"library_geometries" | b"library_visual_scenes" => library = Library::None,
+                b"library_geometries" | b"library_visual_scenes" | b"library_animations" => {
+                    library = Library::None
+                }
                 b"geometry" => {
                     if let Library::Geometries = library {
                         let Some(El::Geometry { id, name }) = stack.pop() else {
@@ -156,7 +196,7 @@ fn read_from_reader(reader: &mut Reader<&[u8]>) -> Result<Document, Error> {
                     }
                 }
                 b"source" => {
-                    if let Library::Geometries = library {
+                    if let Library::Geometries | Library::Animations = library {
                         let Some(El::Source { id }) = stack.pop() else {
                             return Err(Error::UnexpectedClosingTag("source".to_owned()));
                         };
@@ -167,7 +207,7 @@ fn read_from_reader(reader: &mut Reader<&[u8]>) -> Result<Document, Error> {
                     }
                 }
                 b"float_array" => {
-                    if let Library::Geometries = library {
+                    if let Library::Geometries | Library::Animations = library {
                         let Some(El::FloatArray { floats }) = stack.pop() else {
                             return Err(Error::UnexpectedClosingTag("float_array".to_owned()));
                         };
@@ -175,6 +215,20 @@ fn read_from_reader(reader: &mut Reader<&[u8]>) -> Result<Document, Error> {
                         sources.push(Source {
                             id: String::new(),
                             floats,
+                            names: vec![],
+                        });
+                    }
+                }
+                b"Name_array" => {
+                    if let Library::Animations = library {
+                        let Some(El::NameArray { names }) = stack.pop() else {
+                            return Err(Error::UnexpectedClosingTag("Name_array".to_owned()));
+                        };
+
+                        sources.push(Source {
+                            id: String::new(),
+                            floats: vec![],
+                            names,
                         });
                     }
                 }
@@ -205,6 +259,19 @@ fn read_from_reader(reader: &mut Reader<&[u8]>) -> Result<Document, Error> {
                         let Some(El::Mat) = stack.pop() else {
                             return Err(Error::UnexpectedClosingTag("matrix".to_owned()));
                         };
+                    }
+                }
+                b"animation" => {
+                    if let Library::Animations = library {
+                        let Some(El::Animation { id, name }) = stack.pop() else {
+                            return Err(Error::UnexpectedClosingTag("animation".to_owned()));
+                        };
+
+                        doc.animations.push(Animation {
+                            id,
+                            name,
+                            sources: mem::take(&mut sources),
+                        });
                     }
                 }
                 _ => {}
@@ -245,6 +312,12 @@ fn read_from_reader(reader: &mut Reader<&[u8]>) -> Result<Document, Error> {
                         mat.push(f);
                     }
                 }
+                Some(El::NameArray { names }) => {
+                    let e = str::from_utf8(&e)?;
+                    for n in e.split_whitespace() {
+                        names.push(Name::from_str(n)?);
+                    }
+                }
                 _ => {}
             },
             Ok(Event::Eof) => break,
@@ -275,6 +348,7 @@ pub enum Error {
     Utf8Error(Utf8Error),
     FromUtf8Error(FromUtf8Error),
     XmlError(XmlError),
+    Name(String),
 }
 
 impl From<Utf8Error> for Error {
@@ -299,6 +373,7 @@ impl fmt::Display for Error {
             Self::Utf8Error(err) => write!(f, "{err}"),
             Self::FromUtf8Error(err) => write!(f, "{err}"),
             Self::XmlError(err) => write!(f, "{err}"),
+            Self::Name(name) => write!(f, "unknown name {name:?}"),
         }
     }
 }
@@ -310,6 +385,8 @@ enum El {
     Triangles { indxs: Vec<u32> },
     Node(Node),
     Mat,
+    Animation { id: String, name: String },
+    NameArray { names: Vec<Name> },
 }
 
 trait GetAttribute {
