@@ -2,8 +2,8 @@ use crate::format::Document;
 
 use {
     crate::{
-        action::{Action, Animation, Channel, Interpolation, Keyframe},
-        format::{read, Failed, Node},
+        action::{Action, Channel, Interpolation, Keyframe},
+        format::{read, Failed, Name, Node},
         mesh::{IndexOverflow, Mesh, Vert},
         params::{verbose, Parameters},
         skeleton::{Bone, Skeleton, ToManyBones},
@@ -42,27 +42,20 @@ pub fn parse(src: &str, target: Target) -> Result<Vec<Element>, Error> {
 }
 
 fn parse_meshes(doc: Document, output: &mut Vec<Element>) -> Result<(), Error> {
+    let params = Parameters::get();
     for geom in doc.geometry {
         verbose!("read {} ({}) .. ", geom.name, geom.id);
 
         let mut verts = vec![];
-        let mut positions_floats = None;
-        let mut map_floats = None;
+        let mut positions_floats = vec![];
+        let mut map_floats = vec![];
         for source in geom.sources {
             if source.id.ends_with("-positions") {
-                positions_floats = Some(source.floats);
+                positions_floats = source.floats;
             } else if source.id.ends_with("-map-0") {
-                map_floats = Some(source.floats);
+                map_floats = source.floats;
             }
         }
-
-        let Some(positions_floats) = positions_floats else {
-            return Err(Error::NoSource);
-        };
-
-        let Some(map_floats) = map_floats else {
-            return Err(Error::NoSource);
-        };
 
         let mut max_offset = 1;
         let mut vertices_input = None;
@@ -100,7 +93,6 @@ fn parse_meshes(doc: Document, output: &mut Vec<Element>) -> Result<(), Error> {
             let u = *map_floats.get(map_stride).ok_or(Error::Index)?;
             let v = *map_floats.get(map_stride + 1).ok_or(Error::Index)?;
 
-            let params = Parameters::get();
             verts.push(Vert {
                 pos: (params.pos_fn)([x, y, z]),
                 map: (params.map_fn)([u, v]),
@@ -187,6 +179,17 @@ fn parse_skeletons(doc: Document, output: &mut Vec<Element>) -> Result<(), Error
 }
 
 fn parse_actions(doc: Document, output: &mut Vec<Element>) -> Result<(), Error> {
+    use std::iter;
+
+    fn to_rads(deg: f32) -> f32 {
+        use std::f32::consts::PI;
+
+        const M: f32 = PI / 180.;
+
+        deg * M
+    }
+
+    let params = Parameters::get();
     let mut action = Action::default();
     for anim in doc.animations {
         if anim.sources.is_empty() {
@@ -208,42 +211,54 @@ fn parse_actions(doc: Document, output: &mut Vec<Element>) -> Result<(), Error> 
             (chan, bone)
         };
 
-        let mut inputs = None;
-        let mut outputs = None;
+        let mut inputs = vec![];
+        let mut outputs = vec![];
+        let mut names = vec![];
+        let mut intangent = vec![];
+        let mut outtangent = vec![];
         for source in anim.sources {
             if source.id.ends_with("-input") {
-                inputs = Some(source.floats);
+                inputs = source.floats;
             } else if source.id.ends_with("-output") {
-                outputs = Some(source.floats);
+                outputs = source.floats;
+            } else if source.id.ends_with("-interpolation") {
+                names = source.names;
+            } else if source.id.ends_with("-intangent") {
+                intangent = source.floats;
+            } else if source.id.ends_with("-outtangent") {
+                outtangent = source.floats;
             }
         }
 
-        let Some(inputs) = inputs else {
-            return Err(Error::NoSource);
-        };
-
-        let Some(outputs) = outputs else {
-            return Err(Error::NoSource);
-        };
-
-        if inputs.len() != outputs.len() {
+        if inputs.len() != outputs.len() || inputs.len() != names.len() {
             return Err(Error::ArrayLen);
         }
 
         let mut keys = vec![];
-        for (input, output) in inputs.into_iter().zip(outputs) {
-            keys.push(Keyframe {
-                input,
-                output,
-                interpolation: Interpolation::Linear,
-            })
+        let ns = iter::zip(0.., names);
+        let io = iter::zip(inputs, outputs);
+        for ((idx, name), (input, output)) in iter::zip(ns, io) {
+            let [input, output] = (params.act_fn)([input, to_rads(output)]);
+            let int = match name {
+                Name::Linear => Interpolation::Linear,
+                Name::Bezier => {
+                    let stride = idx * 2;
+                    let lx = *intangent.get(stride).ok_or(Error::Index)?;
+                    let ly = *intangent.get(stride + 1).ok_or(Error::Index)?;
+                    let rx = *outtangent.get(stride).ok_or(Error::Index)?;
+                    let ry = *outtangent.get(stride + 1).ok_or(Error::Index)?;
+                    Interpolation::Bezier((params.bez_fn)([lx, ly, rx, ry]))
+                }
+            };
+
+            keys.push(Keyframe { input, output, int })
         }
 
-        action
-            .animations
-            .entry(bone)
-            .or_default()
-            .push(Animation { chan, keys });
+        action.push(bone, chan, keys);
+    }
+
+    if action.is_empty() {
+        verbose!("skipped action");
     }
 
     output.push(Element {
@@ -256,7 +271,6 @@ fn parse_actions(doc: Document, output: &mut Vec<Element>) -> Result<(), Error> 
 
 pub enum Error {
     Document(Failed),
-    NoSource,
     NoVertices,
     NoTextureMap,
     Index,
@@ -290,7 +304,6 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Document(err) => write!(f, "failed to parse document: {err}"),
-            Self::NoSource => write!(f, "source not found"),
             Self::NoVertices => write!(f, "vertices not found"),
             Self::NoTextureMap => write!(f, "the texture map not found"),
             Self::Index => write!(f, "wrong index"),

@@ -4,7 +4,7 @@ use {
     std::{
         env, fmt,
         fs::{self, File},
-        io,
+        io::{self, BufWriter},
         path::PathBuf,
         process::ExitCode,
     },
@@ -39,7 +39,9 @@ fn run(cli: Cli) -> Result<(), Error> {
         verbose: cli.verbose,
         pos_fn: |vs| vs.map(update::<4>),
         map_fn: |[u, v]| [u, 1. - v].map(update::<8>),
-        rot_fn: |vs| vs.map(update::<6>),
+        rot_fn: |vs| vs.map(update::<4>),
+        act_fn: |vs| vs.map(update::<4>),
+        bez_fn: |vs| vs.map(update::<4>),
     });
 
     let src = match cli.filepath {
@@ -62,7 +64,11 @@ fn run(cli: Cli) -> Result<(), Error> {
         let mut path = path.join(element.name);
         path.set_extension("json");
         println!("write element to file {path:?}");
-        let file = File::create(&path).map_err(|_| Error::CreateFile(path))?;
+        let file = {
+            let file = File::create(&path).map_err(|_| Error::CreateFile(path))?;
+            BufWriter::new(file)
+        };
+
         match element.val {
             Value::Mesh(mesh) => serde_json::to_writer(file, &mesh),
             Value::Skeleton(sk) => serde_json::to_writer(file, sk.bones()),

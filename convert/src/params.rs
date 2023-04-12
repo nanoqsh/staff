@@ -9,6 +9,8 @@ pub struct Parameters {
     pub pos_fn: fn([f32; 3]) -> [f32; 3],
     pub map_fn: fn([f32; 2]) -> [f32; 2],
     pub rot_fn: fn([f32; 4]) -> [f32; 4],
+    pub act_fn: fn([f32; 2]) -> [f32; 2],
+    pub bez_fn: fn([f32; 4]) -> [f32; 4],
 }
 
 impl Parameters {
