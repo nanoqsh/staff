@@ -1,6 +1,6 @@
 use {
     clap::Parser,
-    convert::{Error as ParseError, Parameters, Value},
+    convert::{Error as ParseError, Parameters, Target, Value},
     std::{
         env, fmt,
         fs::{self, File},
@@ -56,7 +56,8 @@ fn run(cli: Cli) -> Result<(), Error> {
         fs::create_dir_all(&path).map_err(|_| Error::OutDir)?;
     }
 
-    let elements = convert::parse(&src).map_err(Error::Parse)?;
+    let target = Target::Actions;
+    let elements = convert::parse(&src, target).map_err(Error::Parse)?;
     for element in elements {
         let mut path = path.join(element.name);
         path.set_extension("json");
@@ -64,8 +65,8 @@ fn run(cli: Cli) -> Result<(), Error> {
         let file = File::create(&path).map_err(|_| Error::CreateFile(path))?;
         match element.val {
             Value::Mesh(mesh) => serde_json::to_writer(file, &mesh),
-            Value::Skeleton(sk) => serde_json::to_writer(file, &sk),
-            Value::Animation(_) => todo!("serialize animation"),
+            Value::Skeleton(sk) => serde_json::to_writer(file, sk.bones()),
+            Value::Action(act) => serde_json::to_writer(file, act.animations()),
         }
         .expect("serialize element");
     }

@@ -1,6 +1,8 @@
+use crate::format::Document;
+
 use {
     crate::{
-        animation::Animation,
+        action::{Action, Animation, Channel, Interpolation, Keyframe},
         format::{read, Failed, Node},
         mesh::{IndexOverflow, Mesh, Vert},
         params::{verbose, Parameters},
@@ -17,17 +19,33 @@ pub struct Element {
 pub enum Value {
     Mesh(Mesh),
     Skeleton(Skeleton),
-    Animation(Animation),
+    Action(Action),
 }
 
-pub fn parse(src: &str) -> Result<Vec<Element>, Error> {
-    let mut output = Vec::new();
+pub enum Target {
+    Meshes,
+    Skeletons,
+    Actions,
+}
+
+pub fn parse(src: &str, target: Target) -> Result<Vec<Element>, Error> {
+    let mut output = vec![];
     let doc = read(src)?;
 
+    match target {
+        Target::Meshes => parse_meshes(doc, &mut output)?,
+        Target::Skeletons => parse_skeletons(doc, &mut output)?,
+        Target::Actions => parse_actions(doc, &mut output)?,
+    }
+
+    Ok(output)
+}
+
+fn parse_meshes(doc: Document, output: &mut Vec<Element>) -> Result<(), Error> {
     for geom in doc.geometry {
         verbose!("read {} ({}) .. ", geom.name, geom.id);
 
-        let mut verts = Vec::new();
+        let mut verts = vec![];
         let mut positions_floats = None;
         let mut map_floats = None;
         for source in geom.sources {
@@ -104,6 +122,49 @@ pub fn parse(src: &str) -> Result<Vec<Element>, Error> {
         });
     }
 
+    Ok(())
+}
+
+fn parse_skeletons(doc: Document, output: &mut Vec<Element>) -> Result<(), Error> {
+    fn visit_node(node: Node, parent: Option<&str>, sk: &mut Skeleton) -> Result<(), Error> {
+        use glam::Mat4;
+
+        match node.ty.as_str() {
+            "NODE" => {}
+            "JOINT" => {
+                let (_, rot, pos) = {
+                    let array = node.mat.try_into().map_err(|_| Error::MatSize)?;
+                    let mat = Mat4::from_cols_array(&array).transpose();
+                    if mat.determinant() == 0. {
+                        let name = node.name;
+                        eprintln!("failed to parse the bone {name} since it's determinant is zero");
+                        return Ok(());
+                    }
+
+                    mat.to_scale_rotation_translation()
+                };
+
+                let params = Parameters::get();
+                sk.push(
+                    node.name.clone(),
+                    Bone {
+                        name: node.name.clone(),
+                        pos: (params.pos_fn)(pos.into()),
+                        rot: (params.rot_fn)(rot.into()),
+                        parent: parent.and_then(|name| sk.get(name)),
+                    },
+                )?;
+            }
+            _ => return Err(Error::UndefinedNode(node.ty)),
+        }
+
+        for child in node.children {
+            visit_node(child, Some(&node.name), sk)?;
+        }
+
+        Ok(())
+    }
+
     for node in doc.nodes {
         verbose!("read {} ({}) .. ", node.name, node.id);
 
@@ -122,49 +183,73 @@ pub fn parse(src: &str) -> Result<Vec<Element>, Error> {
         });
     }
 
-    for anim in doc.animations {
-        verbose!("read {} ({}) .. ", anim.name, anim.id);
-        todo!()
-    }
-
-    Ok(output)
+    Ok(())
 }
 
-fn visit_node(node: Node, parent: Option<&str>, sk: &mut Skeleton) -> Result<(), Error> {
-    use glam::Mat4;
+fn parse_actions(doc: Document, output: &mut Vec<Element>) -> Result<(), Error> {
+    let mut action = Action::default();
+    for anim in doc.animations {
+        if anim.sources.is_empty() {
+            continue;
+        }
 
-    match node.ty.as_str() {
-        "NODE" => {}
-        "JOINT" => {
-            let (_, rot, pos) = {
-                let array = node.mat.try_into().map_err(|_| Error::MatSize)?;
-                let mat = Mat4::from_cols_array(&array).transpose();
-                if mat.determinant() == 0. {
-                    let name = node.name;
-                    eprintln!("failed to parse the bone {name} since it's determinant is zero");
-                    return Ok(());
-                }
+        verbose!("read {} ({}) .. ", anim.name, anim.id);
 
-                mat.to_scale_rotation_translation()
+        let (chan, bone) = {
+            let mut parts = anim.id.rsplit("___");
+            let chan = match parts.next().ok_or(Error::AnimationId)? {
+                "rotation_euler_X" => Channel::RotationX,
+                "rotation_euler_Y" => Channel::RotationY,
+                "rotation_euler_Z" => Channel::RotationZ,
+                _ => return Err(Error::AnimationId),
             };
 
-            let params = Parameters::get();
-            sk.push(
-                node.name.clone(),
-                Bone {
-                    name: node.name.clone(),
-                    pos: (params.pos_fn)(pos.into()),
-                    rot: (params.rot_fn)(rot.into()),
-                    parent: parent.and_then(|name| sk.get(name)),
-                },
-            )?;
+            let bone = parts.next().ok_or(Error::AnimationId)?.to_owned();
+            (chan, bone)
+        };
+
+        let mut inputs = None;
+        let mut outputs = None;
+        for source in anim.sources {
+            if source.id.ends_with("-input") {
+                inputs = Some(source.floats);
+            } else if source.id.ends_with("-output") {
+                outputs = Some(source.floats);
+            }
         }
-        _ => return Err(Error::UndefinedNode(node.ty)),
+
+        let Some(inputs) = inputs else {
+            return Err(Error::NoSource);
+        };
+
+        let Some(outputs) = outputs else {
+            return Err(Error::NoSource);
+        };
+
+        if inputs.len() != outputs.len() {
+            return Err(Error::ArrayLen);
+        }
+
+        let mut keys = vec![];
+        for (input, output) in inputs.into_iter().zip(outputs) {
+            keys.push(Keyframe {
+                input,
+                output,
+                interpolation: Interpolation::Linear,
+            })
+        }
+
+        action
+            .animations
+            .entry(bone)
+            .or_default()
+            .push(Animation { chan, keys });
     }
 
-    for child in node.children {
-        visit_node(child, Some(&node.name), sk)?;
-    }
+    output.push(Element {
+        name: "action".to_owned(),
+        val: Value::Action(action),
+    });
 
     Ok(())
 }
@@ -176,6 +261,8 @@ pub enum Error {
     NoTextureMap,
     Index,
     MatSize,
+    ArrayLen,
+    AnimationId,
     UndefinedNode(String),
     IndexOverflow(IndexOverflow),
     ToManyBones(ToManyBones),
@@ -208,6 +295,8 @@ impl fmt::Display for Error {
             Self::NoTextureMap => write!(f, "the texture map not found"),
             Self::Index => write!(f, "wrong index"),
             Self::MatSize => write!(f, "wrong matrix size"),
+            Self::ArrayLen => write!(f, "wrong array length"),
+            Self::AnimationId => write!(f, "invalid animation id"),
             Self::UndefinedNode(node) => write!(f, "undefined node {node}"),
             Self::IndexOverflow(err) => write!(f, "{err}"),
             Self::ToManyBones(err) => write!(f, "{err}"),
