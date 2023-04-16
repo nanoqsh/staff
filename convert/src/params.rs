@@ -14,8 +14,8 @@ pub struct Parameters {
 }
 
 impl Parameters {
-    pub fn init(val: Self) {
-        let val = Box::leak(val.into());
+    pub fn init(self) {
+        let val = Box::leak(self.into());
         let set = PARAMS.with(|params| params.set(val));
         assert!(set.is_ok(), "failed to set parameters");
     }

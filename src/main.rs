@@ -1,11 +1,11 @@
 use {
-    clap::Parser,
-    convert::{Error as ParseError, Parameters, Target, Value},
+    clap::{Parser, Subcommand},
+    convert::{Element, Error as ParseError, Parameters, Target, Value},
     std::{
         env, fmt,
         fs::{self, File},
         io::{self, BufWriter},
-        path::PathBuf,
+        path::{Path, PathBuf},
         process::ExitCode,
     },
 };
@@ -13,16 +13,28 @@ use {
 #[derive(Parser)]
 #[command(version, about)]
 struct Cli {
-    /// File to parse (stdin by default)
-    filepath: Option<PathBuf>,
-
-    /// Specify output directory (current by default)
-    #[arg(short, long)]
-    outdir: Option<PathBuf>,
-
     /// Enable verbore output
     #[arg(short, long)]
     verbose: bool,
+
+    #[command(subcommand)]
+    command: Cmd,
+}
+
+#[derive(Subcommand)]
+enum Cmd {
+    /// Convert .dae objects to .json files
+    Convert {
+        /// Target object to parse (mesh|skeleton|action)
+        target: Target,
+
+        /// File to parse (stdin by default)
+        filepath: Option<PathBuf>,
+
+        /// Specify output directory (current by default)
+        #[arg(short, long)]
+        outdir: Option<PathBuf>,
+    },
 }
 
 fn main() -> ExitCode {
@@ -35,33 +47,49 @@ fn main() -> ExitCode {
 }
 
 fn run(cli: Cli) -> Result<(), Error> {
-    Parameters::init(Parameters {
+    Parameters {
         verbose: cli.verbose,
         pos_fn: |vs| vs.map(update::<4>),
         map_fn: |[u, v]| [u, 1. - v].map(update::<8>),
         rot_fn: |vs| vs.map(update::<4>),
         act_fn: |vs| vs.map(update::<4>),
         bez_fn: |vs| vs.map(update::<4>),
-    });
-
-    let src = match cli.filepath {
-        Some(path) => fs::read_to_string(&path).map_err(|_| Error::ReadFile(path))?,
-        None => io::read_to_string(io::stdin()).map_err(|_| Error::ReadStdin)?,
-    };
-
-    let path = cli
-        .outdir
-        .or_else(|| env::current_dir().ok())
-        .ok_or(Error::OutDir)?;
-
-    if !path.exists() {
-        fs::create_dir_all(&path).map_err(|_| Error::OutDir)?;
     }
+    .init();
 
-    let target = Target::Actions;
-    let elements = convert::parse(&src, target).map_err(Error::Parse)?;
-    for element in elements {
-        let mut path = path.join(element.name);
+    match cli.command {
+        Cmd::Convert {
+            target,
+            filepath,
+            outdir,
+        } => {
+            let src = match filepath {
+                Some(path) => fs::read_to_string(&path).map_err(|_| Error::ReadFile(path))?,
+                None => io::read_to_string(io::stdin()).map_err(|_| Error::ReadStdin)?,
+            };
+
+            let elements = convert::parse(&src, target).map_err(Error::Parse)?;
+            if elements.is_empty() {
+                println!("no elements found");
+                return Ok(());
+            }
+
+            let outdir = outdir
+                .or_else(|| env::current_dir().ok())
+                .ok_or(Error::OutDir)?;
+
+            if !outdir.exists() {
+                fs::create_dir_all(&outdir).map_err(|_| Error::OutDir)?;
+            }
+
+            serialize(&elements, &outdir)
+        }
+    }
+}
+
+fn serialize(elements: &[Element], outdir: &Path) -> Result<(), Error> {
+    for Element { name, val } in elements {
+        let mut path = outdir.join(name);
         path.set_extension("json");
         println!("write element to file {path:?}");
         let file = {
@@ -69,7 +97,7 @@ fn run(cli: Cli) -> Result<(), Error> {
             BufWriter::new(file)
         };
 
-        match element.val {
+        match val {
             Value::Mesh(mesh) => serde_json::to_writer(file, &mesh),
             Value::Skeleton(sk) => serde_json::to_writer(file, sk.bones()),
             Value::Action(act) => serde_json::to_writer(file, act.animations()),

@@ -1,12 +1,11 @@
-use crate::format::Document;
-
 use {
     crate::{
         action::{Action, Channel, Interpolation, Keyframe},
-        format::{read, Failed, Name, Node},
+        format::{read, Document, Failed, Name, Node},
         mesh::{IndexOverflow, Mesh, Vert},
         params::{verbose, Parameters},
         skeleton::{Bone, Skeleton, ToManyBones},
+        target::Target,
     },
     std::fmt,
 };
@@ -22,20 +21,14 @@ pub enum Value {
     Action(Action),
 }
 
-pub enum Target {
-    Meshes,
-    Skeletons,
-    Actions,
-}
-
 pub fn parse(src: &str, target: Target) -> Result<Vec<Element>, Error> {
     let mut output = vec![];
     let doc = read(src)?;
 
     match target {
-        Target::Meshes => parse_meshes(doc, &mut output)?,
-        Target::Skeletons => parse_skeletons(doc, &mut output)?,
-        Target::Actions => parse_actions(doc, &mut output)?,
+        Target::Mesh => parse_meshes(doc, &mut output)?,
+        Target::Skeleton => parse_skeletons(doc, &mut output)?,
+        Target::Action => parse_actions(doc, &mut output)?,
     }
 
     Ok(output)
@@ -238,16 +231,17 @@ fn parse_actions(doc: Document, output: &mut Vec<Element>) -> Result<(), Error> 
         let ns = iter::zip(0.., names);
         let io = iter::zip(inputs, outputs);
         for ((idx, name), (input, output)) in iter::zip(ns, io) {
-            let [input, output] = (params.act_fn)([input, to_rads(output)]);
+            let (x, y) = (input, to_rads(output));
+            let [input, output] = (params.act_fn)([x, y]);
             let int = match name {
                 Name::Linear => Interpolation::Linear,
                 Name::Bezier => {
                     let stride = idx * 2;
-                    let lx = *intangent.get(stride).ok_or(Error::Index)?;
-                    let ly = *intangent.get(stride + 1).ok_or(Error::Index)?;
-                    let rx = *outtangent.get(stride).ok_or(Error::Index)?;
-                    let ry = *outtangent.get(stride + 1).ok_or(Error::Index)?;
-                    Interpolation::Bezier((params.bez_fn)([lx, ly, rx, ry]))
+                    let lx = intangent.get(stride).ok_or(Error::Index)?;
+                    let ly = intangent.get(stride + 1).ok_or(Error::Index)?;
+                    let rx = outtangent.get(stride).ok_or(Error::Index)?;
+                    let ry = outtangent.get(stride + 1).ok_or(Error::Index)?;
+                    Interpolation::Bezier((params.bez_fn)([lx - x, ly - y, rx - x, ry - y]))
                 }
             };
 
