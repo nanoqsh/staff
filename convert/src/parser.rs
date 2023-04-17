@@ -1,6 +1,6 @@
 use {
     crate::{
-        action::{Action, Channel, Interpolation, Keyframe},
+        action::{Action, Channel, Interpolation, Rotation},
         format::{read, Document, Failed, Name, Node},
         mesh::{IndexOverflow, Mesh, Vert},
         params::{verbose, Parameters},
@@ -200,7 +200,7 @@ fn parse_actions(doc: Document, output: &mut Vec<Element>) -> Result<(), Error> 
                 _ => return Err(Error::AnimationId),
             };
 
-            let bone = parts.next().ok_or(Error::AnimationId)?.to_owned();
+            let bone = parts.next().ok_or(Error::AnimationId)?;
             (chan, bone)
         };
 
@@ -227,7 +227,6 @@ fn parse_actions(doc: Document, output: &mut Vec<Element>) -> Result<(), Error> 
             return Err(Error::ArrayLen);
         }
 
-        let mut keys = vec![];
         let ns = iter::zip(0.., names);
         let io = iter::zip(inputs, outputs);
         for ((idx, name), (input, output)) in iter::zip(ns, io) {
@@ -245,10 +244,9 @@ fn parse_actions(doc: Document, output: &mut Vec<Element>) -> Result<(), Error> 
                 }
             };
 
-            keys.push(Keyframe { input, output, int })
+            let rot = Rotation { output, int };
+            action.insert_channel(bone.to_owned(), input, chan(rot));
         }
-
-        action.push(bone, chan, keys);
     }
 
     if action.is_empty() {
