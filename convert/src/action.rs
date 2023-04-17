@@ -1,15 +1,15 @@
 use {serde::Serialize, std::collections::BTreeMap};
 
-type Animations = BTreeMap<String, Vec<Keyframe>>;
+type Keyframes = BTreeMap<String, Vec<Keyframe>>;
 
 #[derive(Default)]
 pub struct Action {
-    animations: Animations,
+    keyframes: Keyframes,
 }
 
 impl Action {
     pub(crate) fn insert_channel(&mut self, bone: String, input: f32, chan: Channel) {
-        let keys = self.animations.entry(bone).or_default();
+        let keys = self.keyframes.entry(bone).or_default();
         match keys.binary_search_by(|key| key.input.total_cmp(&input)) {
             Ok(idx) => {
                 let key = &mut keys[idx];
@@ -26,11 +26,11 @@ impl Action {
     }
 
     pub(crate) fn is_empty(&self) -> bool {
-        self.animations.is_empty()
+        self.keyframes.is_empty()
     }
 
-    pub fn animations(&self) -> &Animations {
-        &self.animations
+    pub fn keyframes(&self) -> &Keyframes {
+        &self.keyframes
     }
 }
 

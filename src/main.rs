@@ -100,7 +100,7 @@ fn serialize(elements: &[Element], outdir: &Path) -> Result<(), Error> {
         match val {
             Value::Mesh(mesh) => serde_json::to_writer(file, &mesh),
             Value::Skeleton(sk) => serde_json::to_writer(file, sk.bones()),
-            Value::Action(act) => serde_json::to_writer(file, act.animations()),
+            Value::Action(act) => serde_json::to_writer(file, act.keyframes()),
         }
         .expect("serialize element");
     }
