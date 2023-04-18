@@ -143,6 +143,8 @@ fn parse_skeletons(doc: Document, output: &mut Vec<Element>) -> Result<(), Error
             _ => return Err(Error::UndefinedNode(node.ty)),
         }
 
+        // Then children come, so parent's index
+        // will be less than self index.
         for child in node.children {
             visit_node(child, Some(&node.name), sk)?;
         }
@@ -155,6 +157,9 @@ fn parse_skeletons(doc: Document, output: &mut Vec<Element>) -> Result<(), Error
 
         let name = node.name.clone();
         let mut sk = Skeleton::default();
+
+        // The root node comes first,
+        // so it's index will be 0
         visit_node(node, None, &mut sk)?;
 
         if sk.is_empty() {

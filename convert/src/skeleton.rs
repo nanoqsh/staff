@@ -11,10 +11,15 @@ pub struct Skeleton {
 
 impl Skeleton {
     pub(crate) fn push(&mut self, name: String, bone: Bone) -> Result<(), ToManyBones> {
-        let id = self.bones.len().try_into().map_err(|_| ToManyBones)?;
-        self.bones.push(bone);
-        self.names.insert(name, id);
+        let idx = self.bones.len().try_into().map_err(|_| ToManyBones)?;
 
+        assert!(
+            bone.parent.map_or(true, |parent_idx| parent_idx < idx),
+            "parent nodes must come first",
+        );
+
+        self.bones.push(bone);
+        self.names.insert(name, idx);
         Ok(())
     }
 
