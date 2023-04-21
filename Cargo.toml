@@ -1,13 +1,12 @@
-[package]
-name = "daem"
-version = "0.1.0"
-edition = "2021"
-authors = ["nano <nanoqsh@gmail.com>"]
+[workspace]
+members = [
+    "cli",
+    "color",
+    "convert",
+]
 
-[dependencies]
-convert = { path = "convert" }
-clap = { version = "4.1", default-features = false, features = ["derive", "help", "std"] }
-serde_json = "1.0"
+[workspace.dependencies]
+serde = { version = "1.0", features = ["derive"] }
 
 [profile.dev]
 split-debuginfo = "unpacked"

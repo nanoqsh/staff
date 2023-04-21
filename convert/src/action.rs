@@ -29,6 +29,7 @@ impl Action {
         self.keyframes.is_empty()
     }
 
+    #[must_use]
     pub fn keyframes(&self) -> &Keyframes {
         &self.keyframes
     }
@@ -88,6 +89,7 @@ pub(crate) enum Interpolation {
     Bezier([f32; 4]),
 }
 
+#[derive(Clone, Copy)]
 pub(crate) enum Channel {
     RotationX(Rotation),
     RotationY(Rotation),

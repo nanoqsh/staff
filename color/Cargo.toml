@@ -1,0 +1,9 @@
+[package]
+name = "color"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+image = { version = "0.24", default-features = false, features = ["png"] }
+palette = { version = "0.7", default-features = false, features = ["std"] }
+serde = { workspace = true }

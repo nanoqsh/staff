@@ -88,6 +88,7 @@ pub(crate) fn read(src: &str) -> Result<Document, Failed> {
     })
 }
 
+#[allow(clippy::too_many_lines)]
 fn read_from_reader(reader: &mut Reader<&[u8]>) -> Result<Document, Error> {
     use events::Event;
 
@@ -176,7 +177,7 @@ fn read_from_reader(reader: &mut Reader<&[u8]>) -> Result<Document, Error> {
             },
             Ok(Event::End(e)) => match e.name().as_ref() {
                 b"library_geometries" | b"library_visual_scenes" | b"library_animations" => {
-                    library = Library::None
+                    library = Library::None;
                 }
                 b"geometry" => {
                     if let Library::Geometries = library {

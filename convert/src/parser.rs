@@ -21,6 +21,10 @@ pub enum Value {
     Action(Action),
 }
 
+/// Parse a collada document.
+///
+/// # Errors
+/// See [`Error`] type for details.
 pub fn parse(src: &str, target: Target) -> Result<Vec<Element>, Error> {
     let mut output = vec![];
     let doc = read(src)?;
@@ -266,6 +270,7 @@ fn parse_actions(doc: Document, output: &mut Vec<Element>) -> Result<(), Error> 
     Ok(())
 }
 
+/// All possible parser errors.
 pub enum Error {
     Document(Failed),
     NoVertices,

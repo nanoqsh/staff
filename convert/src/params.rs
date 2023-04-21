@@ -14,12 +14,21 @@ pub struct Parameters {
 }
 
 impl Parameters {
+    /// Initialize global parameters.
+    ///
+    /// # Panics
+    /// Panics if global parameters is already set.
     pub fn init(self) {
         let val = Box::leak(self.into());
         let set = PARAMS.with(|params| params.set(val));
-        assert!(set.is_ok(), "failed to set parameters");
+        assert!(set.is_ok(), "parameters is already set");
     }
 
+    /// Get global parameters.
+    ///
+    /// # Panics
+    /// Panics if global parameters isn't set.
+    #[must_use]
     pub fn get() -> &'static Self {
         match PARAMS.with(|params| params.get().copied()) {
             Some(val) => val,
