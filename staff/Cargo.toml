@@ -1,8 +1,7 @@
 [package]
-name = "cli"
+name = "staff"
 version = "0.1.0"
 edition = "2021"
-authors = ["nano <nanoqsh@gmail.com>"]
 
 [dependencies]
 color = { path = "../color" }
