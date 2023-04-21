@@ -28,3 +28,14 @@ staff convert mesh model.dae
 ```
 
 If everything went well, it will write a `.json` file to the working directory. Use the `-o` or `--outdir` flag to specify exactly where you want to save files.
+
+## Sprites repainting
+It would be cool to be able to recolor sprites in a desired palette. First you need to collect the palette itself. To do this, specify a `.png` image with specific colors:
+```
+staff collect palette.png
+```
+
+It collect all unique colors and save them to a file. Then, you can recolor the image using this palette. It take the `palette.json` file by default, but you can specify a specific palette file with the following argument:
+```
+staff repaint sprite.png palette.json
+```

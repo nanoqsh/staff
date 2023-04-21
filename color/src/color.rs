@@ -63,7 +63,7 @@ pub struct ParseError<'a>(&'a str);
 
 impl fmt::Display for ParseError<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "failed to parse {:?} to rgba color", self.0)
+        write!(f, "failed to parse {:?} to rgb color", self.0)
     }
 }
 
