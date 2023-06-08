@@ -134,15 +134,12 @@ fn parse_skeletons(doc: Document, output: &mut Vec<Element>) -> Result<(), Error
                 };
 
                 let params = Parameters::get();
-                sk.push(
-                    node.name.clone(),
-                    Bone {
-                        name: node.name.clone(),
-                        pos: (params.pos_fn)(pos.into()),
-                        rot: (params.rot_fn)(rot.into()),
-                        parent: parent.and_then(|name| sk.get(name)),
-                    },
-                )?;
+                sk.push(Bone {
+                    name: node.name.clone(),
+                    pos: (params.pos_fn)(pos.into()),
+                    rot: (params.rot_fn)(rot.into()),
+                    parent: parent.and_then(|name| sk.get(name)),
+                })?;
             }
             _ => return Err(Error::UndefinedNode(node.ty)),
         }

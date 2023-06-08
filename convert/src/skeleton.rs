@@ -10,16 +10,12 @@ pub struct Skeleton {
 }
 
 impl Skeleton {
-    pub(crate) fn push(&mut self, name: String, bone: Bone) -> Result<(), ToManyBones> {
+    pub(crate) fn push(&mut self, bone: Bone) -> Result<(), ToManyBones> {
         let idx = self.bones.len().try_into().map_err(|_| ToManyBones)?;
+        assert!(bone.parent < Some(idx), "parent nodes must come first");
 
-        assert!(
-            bone.parent.map_or(true, |parent_idx| parent_idx < idx),
-            "parent nodes must come first",
-        );
-
+        self.names.insert(bone.name.clone(), idx);
         self.bones.push(bone);
-        self.names.insert(name, idx);
         Ok(())
     }
 
@@ -51,4 +47,30 @@ pub struct Bone {
     pub pos: [f32; 3],
     pub rot: [f32; 4],
     pub parent: Option<u16>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn push() {
+        let mut skeleton = Skeleton::default();
+        assert!(skeleton.push(Bone::with_parent(None)).is_ok());
+        assert!(skeleton.push(Bone::with_parent(Some(0))).is_ok());
+        assert!(skeleton.push(Bone::with_parent(Some(0))).is_ok());
+        assert!(skeleton.push(Bone::with_parent(Some(1))).is_ok());
+        assert!(skeleton.push(Bone::with_parent(Some(2))).is_ok());
+    }
+
+    impl Bone {
+        fn with_parent(parent: Option<u16>) -> Self {
+            Self {
+                name: String::default(),
+                pos: [0.; 3],
+                rot: [0.; 4],
+                parent,
+            }
+        }
+    }
 }

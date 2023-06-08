@@ -1,4 +1,4 @@
-use once_cell::unsync::OnceCell;
+use std::cell::OnceCell;
 
 thread_local! {
     static PARAMS: OnceCell<&'static Parameters> = OnceCell::new();
