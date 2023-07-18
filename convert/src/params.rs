@@ -1,7 +1,7 @@
 use std::cell::OnceCell;
 
 thread_local! {
-    static PARAMS: OnceCell<&'static Parameters> = OnceCell::new();
+    static PARAMS: OnceCell<&'static Parameters> = const { OnceCell::new() };
 }
 
 pub struct Parameters {

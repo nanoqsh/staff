@@ -1,6 +1,6 @@
 use {
     crate::color::Color,
-    palette::{convert::IntoColorUnclamped, ColorDifference, Lab, LinSrgb, Srgb},
+    palette::{color_difference::Ciede2000, convert::IntoColorUnclamped, Lab, LinSrgb, Srgb},
     std::collections::HashMap,
 };
 
@@ -31,19 +31,17 @@ impl Palette {
                 Srgb::new(r, g, b).into_linear().into_color_unclamped()
             };
 
-            let ds = self
-                .colors
-                .iter()
-                .map(|col| col.get_color_difference(target));
-
-            let mut min = f32::INFINITY;
-            let mut min_idx = 0;
-            for (idx, d) in (0..).zip(ds) {
-                if d < min {
-                    min = d;
-                    min_idx = idx;
-                }
-            }
+            let diffs = self.colors.iter().map(|col| col.difference(target));
+            let (min_idx, _) =
+                (0..)
+                    .zip(diffs)
+                    .fold((0, f32::INFINITY), |min @ (_, min_diff), (idx, diff)| {
+                        if diff < min_diff {
+                            (idx, diff)
+                        } else {
+                            min
+                        }
+                    });
 
             let linrgb: LinSrgb = self.colors[min_idx].into_color_unclamped();
             let rgb = Srgb::from_linear(linrgb);
