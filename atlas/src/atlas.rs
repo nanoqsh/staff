@@ -1,8 +1,13 @@
 use {
     crate::pack::{self, Pack, Rect},
     png::{Error as ImageError, Format, Image},
-    std::fmt,
+    std::{collections::BTreeMap, fmt},
 };
+
+pub struct ImageData {
+    pub name: Box<str>,
+    pub data: Vec<u8>,
+}
 
 /// Make an atlas from images.
 ///
@@ -22,20 +27,16 @@ where
 
     let mut sprites = sprites?;
     sprites.sort_unstable_by(|a, b| a.name.cmp(&b.name));
-    Ok(Atlas::pack(sprites))
-}
-
-pub struct ImageData {
-    pub name: Box<str>,
-    pub data: Vec<u8>,
+    Atlas::pack(sprites)
 }
 
 pub struct Atlas {
-    map: Image,
+    pub png: Vec<u8>,
+    pub map: BTreeMap<Box<str>, Rect>,
 }
 
 impl Atlas {
-    fn pack(sprites: Vec<Sprite>) -> Self {
+    fn pack(sprites: Vec<Sprite>) -> Result<Self, Error> {
         use std::iter;
 
         let entries: Vec<_> = sprites
@@ -59,11 +60,18 @@ impl Atlas {
 
         let Pack { rects, side } = pack::pack(&entries);
         let mut map = Image::empty((side, side), format);
-        for (sprite, Rect { point, .. }) in iter::zip(sprites, rects) {
-            map.copy_from(&sprite.image, point);
+        for (Sprite { image, .. }, rect) in iter::zip(&sprites, &rects) {
+            map.copy_from(image, rect.point());
         }
 
-        Self { map }
+        Ok(Self {
+            png: png::encode_png(&map)?,
+            map: sprites
+                .into_iter()
+                .map(|Sprite { name, .. }| name)
+                .zip(rects)
+                .collect(),
+        })
     }
 }
 
@@ -77,9 +85,22 @@ pub struct Error {
     name: Box<str>,
 }
 
+impl From<ImageError> for Error {
+    fn from(err: ImageError) -> Self {
+        Self {
+            err,
+            name: Box::default(),
+        }
+    }
+}
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let Self { err, name } = self;
-        write!(f, "with an image {name:?}: {err}")
+        if name.is_empty() {
+            write!(f, "{err}")
+        } else {
+            write!(f, "with an image {name:?}: {err}")
+        }
     }
 }

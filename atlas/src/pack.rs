@@ -1,14 +1,35 @@
+use serde::Serialize;
+
 type Size = (u32, u32);
-type Position = (u32, u32);
+type Point = (u32, u32);
+
+#[derive(Clone, Copy, Serialize)]
+#[serde(into = "[u32; 4]")]
+pub struct Rect {
+    size: Size,
+    point: Point,
+}
+
+impl Rect {
+    pub(crate) fn point(self) -> Point {
+        self.point
+    }
+}
+
+impl From<Rect> for [u32; 4] {
+    fn from(
+        Rect {
+            size: (w, h),
+            point: (x, y),
+        }: Rect,
+    ) -> Self {
+        [x, y, w, h]
+    }
+}
 
 pub(crate) struct Pack {
     pub rects: Vec<Rect>,
     pub side: u32,
-}
-
-pub(crate) struct Rect {
-    pub size: Size,
-    pub point: Position,
 }
 
 pub(crate) fn pack(entries: &[Size]) -> Pack {
