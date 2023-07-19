@@ -1,6 +1,6 @@
 use {
     crate::{color::Color, palette::Palette},
-    png::{Error as ImageError, Image},
+    png::{Error as ImageError, Image, Rgb},
     std::{collections::HashSet, fmt},
 };
 
@@ -9,10 +9,10 @@ use {
 /// # Errors
 /// See [`Error`] for details.
 pub fn collect(data: &[u8]) -> Result<Vec<Color>, Error> {
-    let im = png::read_png(data)?.into_rgb();
+    let im = png::decode_png(data)?.into_rgb();
     let mut colors = HashSet::new();
-    for rgb in im.pixels() {
-        colors.insert(Color(rgb.0));
+    for Rgb(rgb) in im.pixels() {
+        colors.insert(Color(*rgb));
     }
 
     let mut colors: Vec<_> = colors.into_iter().collect();
@@ -30,14 +30,14 @@ pub fn repaint(data: &[u8], colors: &[Color]) -> Result<Vec<u8>, Error> {
         return Err(Error::EmptyPalette);
     }
 
-    let mut im = png::read_png(data)?.into_rgb();
-    for rbg in im.pixels_mut() {
-        let Color(new) = palette.closest(Color(rbg.0));
-        *rbg = new.into();
+    let mut im = png::decode_png(data)?.into_rgb();
+    for Rgb(rgb) in im.pixels_mut() {
+        let Color(new) = palette.closest(Color(*rgb));
+        *rgb = new;
     }
 
     let im = Image::Rgb(im);
-    let png = png::write_png(&im)?;
+    let png = png::encode_png(&im)?;
     Ok(png)
 }
 

@@ -6,6 +6,28 @@ use {
     std::fmt,
 };
 
+use image::GenericImage;
+pub use image::Rgb;
+
+/// The image format.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Format {
+    Gray = 1,
+    Rgb = 3,
+    Rgba = 4,
+}
+
+impl From<Format> for ColorType {
+    fn from(format: Format) -> Self {
+        match format {
+            Format::Gray => Self::L8,
+            Format::Rgb => Self::Rgb8,
+            Format::Rgba => Self::Rgba8,
+        }
+    }
+}
+
+#[must_use]
 pub enum Image {
     Gray(GrayImage),
     Rgb(RgbImage),
@@ -13,6 +35,14 @@ pub enum Image {
 }
 
 impl Image {
+    pub fn empty((width, height): (u32, u32), format: Format) -> Self {
+        match format {
+            Format::Gray => Self::Gray(GrayImage::new(width, height)),
+            Format::Rgb => Self::Rgb(RgbImage::new(width, height)),
+            Format::Rgba => Self::Rgba(RgbaImage::new(width, height)),
+        }
+    }
+
     fn from_dynamic(im: DynamicImage) -> Result<Self, Error> {
         match im {
             DynamicImage::ImageLuma8(im) => Ok(Self::Gray(im)),
@@ -30,11 +60,12 @@ impl Image {
         }
     }
 
-    fn color_type(&self) -> ColorType {
+    #[must_use]
+    pub fn format(&self) -> Format {
         match self {
-            Self::Gray(_) => ColorType::L8,
-            Self::Rgb(_) => ColorType::Rgb8,
-            Self::Rgba(_) => ColorType::Rgba8,
+            Self::Gray(_) => Format::Gray,
+            Self::Rgb(_) => Format::Rgb,
+            Self::Rgba(_) => Format::Rgba,
         }
     }
 
@@ -47,6 +78,30 @@ impl Image {
         }
     }
 
+    /// Copies another image into this image.
+    ///
+    /// # Panics
+    /// This function panics if the image formats are different.
+    pub fn copy_from(&mut self, from: &Self, (x, y): (u32, u32)) {
+        let copied = match (self, from) {
+            (Self::Gray(im), Self::Gray(from)) => im.copy_from(from, x, y),
+            (Self::Rgb(im), Self::Rgb(from)) => im.copy_from(from, x, y),
+            (Self::Rgba(im), Self::Rgba(from)) => im.copy_from(from, x, y),
+            _ => panic!("different image formats"),
+        };
+
+        copied.expect("copy image");
+    }
+
+    #[must_use]
+    pub fn into_gray(self) -> GrayImage {
+        match self {
+            Self::Gray(im) => im,
+            Self::Rgb(im) => DynamicImage::from(im).into_luma8(),
+            Self::Rgba(im) => DynamicImage::from(im).into_luma8(),
+        }
+    }
+
     #[must_use]
     pub fn into_rgb(self) -> RgbImage {
         match self {
@@ -55,34 +110,59 @@ impl Image {
             Self::Rgba(im) => DynamicImage::from(im).into_rgb8(),
         }
     }
+
+    #[must_use]
+    pub fn into_rgba(self) -> RgbaImage {
+        match self {
+            Self::Gray(im) => DynamicImage::from(im).into_rgba8(),
+            Self::Rgb(im) => DynamicImage::from(im).into_rgba8(),
+            Self::Rgba(im) => im,
+        }
+    }
+
+    pub fn into_format(self, format: Format) -> Self {
+        if self.format() == format {
+            return self;
+        }
+
+        match format {
+            Format::Gray => Self::Gray(self.into_gray()),
+            Format::Rgb => Self::Rgb(self.into_rgb()),
+            Format::Rgba => Self::Rgba(self.into_rgba()),
+        }
+    }
 }
 
-/// Reads the png image from bytes.
+/// Decodes the png image from bytes.
 ///
 /// # Errors
 /// See [`Error`] for details.
-pub fn read_png(data: &[u8]) -> Result<Image, Error> {
+pub fn decode_png(data: &[u8]) -> Result<Image, Error> {
     let decoder = PngDecoder::new(data)?;
     let im = DynamicImage::from_decoder(decoder)?;
     Image::from_dynamic(im)
 }
 
-/// Writes the png image in a bytes buffer.
+/// Encodes the png image in a bytes buffer.
 ///
 /// # Errors
 /// See [`Error`] for details.
-pub fn write_png(im: &Image) -> Result<Vec<u8>, Error> {
+pub fn encode_png(im: &Image) -> Result<Vec<u8>, Error> {
     const DEFAULT_BUFFER_CAP: usize = 256;
 
     let mut buf = Vec::with_capacity(DEFAULT_BUFFER_CAP);
     let encoder = PngEncoder::new(&mut buf);
     let (width, height) = im.dimensions();
-    encoder.write_image(im.as_bytes(), width, height, im.color_type())?;
+    encoder.write_image(im.as_bytes(), width, height, im.format().into())?;
     Ok(buf)
 }
 
+/// The png image error.
 pub enum Error {
+    /// Error while working png data.
     Image(ImageError),
+
+    /// A format is not supported.
     UnsupportedFormat,
 }
 

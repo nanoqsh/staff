@@ -1,5 +1,6 @@
 use {
-    png::{Error as ImageError, Image},
+    crate::pack::{self, Pack, Rect},
+    png::{Error as ImageError, Format, Image},
     std::fmt,
 };
 
@@ -13,26 +14,15 @@ where
 {
     let sprites: Result<Vec<Sprite>, Error> = data
         .into_iter()
-        .map(|ImageData { name, data }| match png::read_png(&data) {
+        .map(|ImageData { name, data }| match png::decode_png(&data) {
             Ok(image) => Ok(Sprite { image, name }),
-            Err(err) => Err(Error::Image { err, name }),
+            Err(err) => Err(Error { err, name }),
         })
         .collect();
 
     let mut sprites = sprites?;
     sprites.sort_unstable_by(|a, b| a.name.cmp(&b.name));
-
-    for sprite in sprites {
-        // TODO:
-        _ = sprite.image;
-    }
-
-    Ok(Atlas)
-}
-
-struct Sprite {
-    image: Image,
-    name: Box<str>,
+    Ok(Atlas::pack(sprites))
 }
 
 pub struct ImageData {
@@ -40,16 +30,56 @@ pub struct ImageData {
     pub data: Vec<u8>,
 }
 
-pub struct Atlas;
+pub struct Atlas {
+    map: Image,
+}
 
-pub enum Error {
-    Image { err: ImageError, name: Box<str> },
+impl Atlas {
+    fn pack(sprites: Vec<Sprite>) -> Self {
+        use std::iter;
+
+        let entries: Vec<_> = sprites
+            .iter()
+            .map(|Sprite { image, .. }| image.dimensions())
+            .collect();
+
+        let format = sprites
+            .iter()
+            .map(|Sprite { image, .. }| image.format())
+            .max()
+            .unwrap_or(Format::Gray);
+
+        let sprites: Vec<_> = sprites
+            .into_iter()
+            .map(|sprite| Sprite {
+                image: sprite.image.into_format(format),
+                ..sprite
+            })
+            .collect();
+
+        let Pack { rects, side } = pack::pack(&entries);
+        let mut map = Image::empty((side, side), format);
+        for (sprite, Rect { point, .. }) in iter::zip(sprites, rects) {
+            map.copy_from(&sprite.image, point);
+        }
+
+        Self { map }
+    }
+}
+
+struct Sprite {
+    image: Image,
+    name: Box<str>,
+}
+
+pub struct Error {
+    err: ImageError,
+    name: Box<str>,
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Image { err, name } => write!(f, "with image {name:?}: {err}"),
-        }
+        let Self { err, name } = self;
+        write!(f, "with an image {name:?}: {err}")
     }
 }
