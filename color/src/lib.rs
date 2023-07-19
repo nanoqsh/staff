@@ -1,5 +1,4 @@
 mod color;
-mod image;
 mod palette;
 mod tools;
 

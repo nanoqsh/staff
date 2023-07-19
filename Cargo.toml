@@ -1,9 +1,5 @@
 [workspace]
-members = [
-    "color",
-    "convert",
-    "staff",
-]
+members = ["atlas", "color", "convert", "staff"]
 
 [workspace.dependencies]
 serde = { version = "1.0", features = ["derive"] }
