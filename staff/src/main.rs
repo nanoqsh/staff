@@ -1,5 +1,5 @@
 use {
-    atlas::{Atlas, Error as AtlasError, ImageData, Map},
+    atlas::{Atlas, Error as AtlasError, ImageData, Map, Margin, TooLarge},
     clap::{Parser, Subcommand},
     color::{Color, Error as ColorError},
     convert::{Element, Error as ParseError, Parameters, Target, Value},
@@ -81,6 +81,14 @@ enum Cmd {
         /// Specify output directory (current by default)
         #[arg(short, long)]
         outdir: Option<PathBuf>,
+
+        /// Specify horizontal margin
+        #[arg(long, default_value_t = 0)]
+        hm: u32,
+
+        /// Specify vertical margin
+        #[arg(long, default_value_t = 0)]
+        vm: u32,
     },
 }
 
@@ -169,9 +177,12 @@ fn run(cli: Cli) -> Result<(), Error> {
             sprites,
             name,
             outdir,
+            hm,
+            vm,
         } => {
             let data = read_sprites(sprites)?;
-            let Atlas { png, map } = atlas::make(data)?;
+            let margin = Margin::new(hm, vm)?;
+            let Atlas { png, map } = atlas::make(data, margin)?;
             let name = name.as_deref().unwrap_or(OUT_NAME);
             let outdir = make_outdir(outdir)?;
             write_png(&png, name, &outdir)?;
@@ -300,6 +311,7 @@ enum Error {
     WriteToFile(PathBuf),
     PalettePathNotSet,
     Atlas(AtlasError),
+    Margin(TooLarge),
     Parse(ParseError),
     Color(ColorError),
     Json(JsonError),
@@ -308,6 +320,12 @@ enum Error {
 impl From<AtlasError> for Error {
     fn from(v: AtlasError) -> Self {
         Self::Atlas(v)
+    }
+}
+
+impl From<TooLarge> for Error {
+    fn from(v: TooLarge) -> Self {
+        Self::Margin(v)
     }
 }
 
@@ -339,6 +357,7 @@ impl fmt::Display for Error {
             Self::WriteToFile(path) => write!(f, "failed to write file {path:?}"),
             Self::PalettePathNotSet => write!(f, "the palette path is not set"),
             Self::Atlas(err) => write!(f, "{err}"),
+            Self::Margin(err) => write!(f, "{err}"),
             Self::Parse(err) => write!(f, "{err}"),
             Self::Color(err) => write!(f, "{err}"),
             Self::Json(err) => write!(f, "{err}"),
