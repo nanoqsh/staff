@@ -69,9 +69,9 @@ enum Cmd {
         #[arg(short, long)]
         outdir: Option<PathBuf>,
     },
-    /// Creates a new atlas from given sprite images.
+    /// Creates a new atlas from given sprite images
     Atlas {
-        /// Pathes of image sprites.
+        /// Pathes of image sprites
         sprites: Vec<PathBuf>,
 
         /// The atlas name ("out" by default)
@@ -171,8 +171,7 @@ fn run(cli: Cli) -> Result<(), Error> {
             outdir,
         } => {
             let data = read_sprites(sprites)?;
-            let Atlas { png, map } = atlas::atlas(data)?;
-
+            let Atlas { png, map } = atlas::make(data)?;
             let name = name.as_deref().unwrap_or(OUT_NAME);
             let outdir = make_outdir(outdir)?;
             write_png(&png, name, &outdir)?;

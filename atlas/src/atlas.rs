@@ -14,21 +14,19 @@ pub struct ImageData {
 ///
 /// # Errors
 /// See [`Error`] type for details.
-pub fn atlas<D>(data: D) -> Result<Atlas, Error>
-where
-    D: IntoIterator<Item = ImageData>,
-{
-    let sprites: Result<Vec<Sprite>, Error> = data
-        .into_iter()
+pub fn make(data: Vec<ImageData>) -> Result<Atlas, Error> {
+    let mut sprites = decode_sprites(data)?;
+    sprites.sort_unstable_by(|a, b| a.name.cmp(&b.name));
+    Atlas::pack(sprites)
+}
+
+fn decode_sprites(data: Vec<ImageData>) -> Result<Vec<Sprite>, Error> {
+    data.into_iter()
         .map(|ImageData { name, data }| match png::decode_png(&data) {
             Ok(image) => Ok(Sprite { image, name }),
             Err(err) => Err(Error { err, name }),
         })
-        .collect();
-
-    let mut sprites = sprites?;
-    sprites.sort_unstable_by(|a, b| a.name.cmp(&b.name));
-    Atlas::pack(sprites)
+        .collect()
 }
 
 pub struct Atlas {

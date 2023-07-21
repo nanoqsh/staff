@@ -1,4 +1,4 @@
 mod atlas;
 mod pack;
 
-pub use crate::atlas::{atlas, Atlas, Error, ImageData, Map};
+pub use crate::atlas::{make, Atlas, Error, ImageData, Map};
