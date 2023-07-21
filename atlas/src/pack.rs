@@ -5,7 +5,7 @@ type Point = (u32, u32);
 
 #[derive(Clone, Copy, Serialize)]
 #[serde(into = "[u32; 4]")]
-pub struct Rect {
+pub(crate) struct Rect {
     size: Size,
     point: Point,
 }

@@ -1,6 +1,7 @@
 use {
     crate::pack::{self, Pack, Rect},
     png::{Error as ImageError, Format, Image},
+    serde::Serialize,
     std::{collections::BTreeMap, fmt},
 };
 
@@ -32,7 +33,7 @@ where
 
 pub struct Atlas {
     pub png: Vec<u8>,
-    pub map: BTreeMap<Box<str>, Rect>,
+    pub map: Map,
 }
 
 impl Atlas {
@@ -66,14 +67,17 @@ impl Atlas {
 
         Ok(Self {
             png: png::encode_png(&map)?,
-            map: sprites
+            map: Map(sprites
                 .into_iter()
                 .map(|Sprite { name, .. }| name)
                 .zip(rects)
-                .collect(),
+                .collect()),
         })
     }
 }
+
+#[derive(Serialize)]
+pub struct Map(BTreeMap<Box<str>, Rect>);
 
 struct Sprite {
     image: Image,

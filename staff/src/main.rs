@@ -1,10 +1,13 @@
 use {
+    atlas::{Atlas, Error as AtlasError, ImageData, Map},
     clap::{Parser, Subcommand},
     color::{Color, Error as ColorError},
     convert::{Element, Error as ParseError, Parameters, Target, Value},
     serde_json::Error as JsonError,
     std::{
-        env, fmt,
+        env,
+        ffi::OsStr,
+        fmt,
         fs::{self, File},
         io::{self, BufWriter, Read, Write},
         path::{Path, PathBuf},
@@ -59,6 +62,19 @@ enum Cmd {
         palettepath: Option<PathBuf>,
 
         /// New image name ("out" by default)
+        #[arg(short, long)]
+        name: Option<String>,
+
+        /// Specify output directory (current by default)
+        #[arg(short, long)]
+        outdir: Option<PathBuf>,
+    },
+    /// Creates a new atlas from given sprite images.
+    Atlas {
+        /// Pathes of image sprites.
+        sprites: Vec<PathBuf>,
+
+        /// The atlas name ("out" by default)
         #[arg(short, long)]
         name: Option<String>,
 
@@ -149,6 +165,19 @@ fn run(cli: Cli) -> Result<(), Error> {
             let outdir = make_outdir(outdir)?;
             write_png(&png, name, &outdir)
         }
+        Cmd::Atlas {
+            sprites,
+            name,
+            outdir,
+        } => {
+            let data = read_sprites(sprites)?;
+            let Atlas { png, map } = atlas::atlas(data)?;
+
+            let name = name.as_deref().unwrap_or(OUT_NAME);
+            let outdir = make_outdir(outdir)?;
+            write_png(&png, name, &outdir)?;
+            serialize_map(&map, name, &outdir)
+        }
     }
 }
 
@@ -173,6 +202,24 @@ fn read_data(path: Option<PathBuf>) -> Result<Vec<u8>, Error> {
         Some(path) => fs::read(&path).map_err(|_| Error::ReadFile(path)),
         None => stdin_read(),
     }
+}
+
+fn read_sprites(sprites: Vec<PathBuf>) -> Result<Vec<ImageData>, Error> {
+    sprites
+        .into_iter()
+        .map(|path| {
+            let (name, _) = path
+                .file_name()
+                .and_then(OsStr::to_str)
+                .and_then(|filename| filename.rsplit_once('.'))
+                .unwrap_or_default();
+
+            Ok(ImageData {
+                name: name.to_owned().into_boxed_str(),
+                data: read_data(Some(path))?,
+            })
+        })
+        .collect()
 }
 
 fn make_outdir(outdir: Option<PathBuf>) -> Result<PathBuf, Error> {
@@ -221,6 +268,19 @@ fn serialize_colors(colors: &[Color], name: &str, outdir: &Path) -> Result<(), E
     Ok(())
 }
 
+fn serialize_map(map: &Map, name: &str, outdir: &Path) -> Result<(), Error> {
+    let mut path = outdir.join(name);
+    path.set_extension("json");
+    println!("write atlas map to file {path:?}");
+    let file = {
+        let file = File::create(&path).map_err(|_| Error::CreateFile(path))?;
+        BufWriter::new(file)
+    };
+
+    serde_json::to_writer(file, map).expect("serialize colors");
+    Ok(())
+}
+
 fn write_png(data: &[u8], name: &str, outdir: &Path) -> Result<(), Error> {
     let mut path = outdir.join(name);
     path.set_extension("png");
@@ -240,9 +300,16 @@ enum Error {
     CreateFile(PathBuf),
     WriteToFile(PathBuf),
     PalettePathNotSet,
+    Atlas(AtlasError),
     Parse(ParseError),
     Color(ColorError),
     Json(JsonError),
+}
+
+impl From<AtlasError> for Error {
+    fn from(v: AtlasError) -> Self {
+        Self::Atlas(v)
+    }
 }
 
 impl From<ParseError> for Error {
@@ -272,6 +339,7 @@ impl fmt::Display for Error {
             Self::CreateFile(path) => write!(f, "failed to create the file {path:?}"),
             Self::WriteToFile(path) => write!(f, "failed to write file {path:?}"),
             Self::PalettePathNotSet => write!(f, "the palette path is not set"),
+            Self::Atlas(err) => write!(f, "{err}"),
             Self::Parse(err) => write!(f, "{err}"),
             Self::Color(err) => write!(f, "{err}"),
             Self::Json(err) => write!(f, "{err}"),
