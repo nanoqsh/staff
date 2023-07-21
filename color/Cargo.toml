@@ -4,6 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-png = { path = "../png" }
+im = { path = "../im" }
 palette = { version = "0.7", default-features = false, features = ["std"] }
 serde = { workspace = true }

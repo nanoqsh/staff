@@ -27,7 +27,7 @@ dependencies = [
 name = "atlas"
 version = "0.1.0"
 dependencies = [
- "png 0.1.0",
+ "im",
  "serde",
 ]
 
@@ -104,8 +104,8 @@ checksum = "2da6da31387c7e4ef160ffab6d5e7f00c42626fe39aea70a7b0f1773f7dd6c1b"
 name = "color"
 version = "0.1.0"
 dependencies = [
+ "im",
  "palette",
- "png 0.1.0",
  "serde",
 ]
 
@@ -171,6 +171,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95505c38b4572b2d910cecb0281560f54b440a19336cbbcb27bf6ce6adc6f5a8"
 
 [[package]]
+name = "im"
+version = "0.1.0"
+dependencies = [
+ "image",
+]
+
+[[package]]
 name = "image"
 version = "0.24.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -181,7 +188,7 @@ dependencies = [
  "color_quant",
  "num-rational",
  "num-traits",
- "png 0.17.9",
+ "png",
 ]
 
 [[package]]
@@ -262,13 +269,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "png"
-version = "0.1.0"
-dependencies = [
- "image",
 ]
 
 [[package]]

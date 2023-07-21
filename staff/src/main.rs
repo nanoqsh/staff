@@ -82,6 +82,14 @@ enum Cmd {
         #[arg(short, long)]
         outdir: Option<PathBuf>,
 
+        /// Specify horizontal padding
+        #[arg(long, default_value_t = 0)]
+        hp: u32,
+
+        /// Specify vertical padding
+        #[arg(long, default_value_t = 0)]
+        vp: u32,
+
         /// Specify horizontal margin
         #[arg(long, default_value_t = 0)]
         hm: u32,
@@ -179,10 +187,20 @@ fn run(cli: Cli) -> Result<(), Error> {
             outdir,
             hm,
             vm,
+            hp,
+            vp,
         } => {
+            use atlas::Parameters;
+
             let data = read_sprites(sprites)?;
-            let margin = Indent::new(hm, vm)?;
-            let Atlas { png, map } = atlas::make(data, margin)?;
+            let Atlas { png, map } = atlas::make(
+                data,
+                Parameters {
+                    padding: Indent::new(hp, vp)?,
+                    margin: Indent::new(hm, vm)?,
+                },
+            )?;
+
             let name = name.as_deref().unwrap_or(OUT_NAME);
             let outdir = make_outdir(outdir)?;
             write_png(&png, name, &outdir)?;
