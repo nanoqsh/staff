@@ -1,4 +1,4 @@
-use {serde::Serialize, std::fmt};
+use {crate::indent::Indent, serde::Serialize};
 
 type Size = (u32, u32);
 type Point = (u32, u32);
@@ -32,7 +32,7 @@ pub(crate) struct Pack {
     pub side: u32,
 }
 
-pub(crate) fn pack(entries: &[Size], margin: Margin) -> Pack {
+pub(crate) fn pack(entries: &[Size], margin: Indent) -> Pack {
     let mut side = initial_side(entries);
     loop {
         match try_pack(entries, side, margin) {
@@ -57,7 +57,7 @@ fn initial_side(entries: &[Size]) -> u32 {
     u32::max(side, MIN_INITIAL_SIDE)
 }
 
-fn try_pack(entries: &[Size], side: u32, margin: Margin) -> Option<Vec<Rect>> {
+fn try_pack(entries: &[Size], side: u32, margin: Indent) -> Option<Vec<Rect>> {
     let mut x = margin.horizontal;
     let mut y = margin.vertical;
     let mut max_height = 0;
@@ -86,51 +86,4 @@ fn try_pack(entries: &[Size], side: u32, margin: Margin) -> Option<Vec<Rect>> {
             })
         })
         .collect()
-}
-
-#[derive(Clone, Copy)]
-pub struct Margin {
-    horizontal: u32,
-    vertical: u32,
-}
-
-impl Margin {
-    const MAX_HORIZONTAL: u32 = 4;
-    const MAX_VERTICAL: u32 = 4;
-
-    /// Creates a new margin.
-    ///
-    /// # Errors
-    /// This function returns an error if the margin is [too large](TooLarge).
-    pub fn new(horizontal: u32, vertical: u32) -> Result<Self, TooLarge> {
-        if horizontal > Self::MAX_HORIZONTAL {
-            return Err(TooLarge::Horizontal(horizontal));
-        }
-
-        if vertical > Self::MAX_VERTICAL {
-            return Err(TooLarge::Vertical(vertical));
-        }
-
-        Ok(Self {
-            horizontal,
-            vertical,
-        })
-    }
-}
-
-/// The margin is too large.
-pub enum TooLarge {
-    Horizontal(u32),
-    Vertical(u32),
-}
-
-impl fmt::Display for TooLarge {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let (ty, margin, max) = match self {
-            Self::Horizontal(margin) => ("horizontal", margin, Margin::MAX_HORIZONTAL),
-            Self::Vertical(margin) => ("vertical", margin, Margin::MAX_VERTICAL),
-        };
-
-        write!(f, "{ty} margin {margin} is greater than maximum {max}",)
-    }
 }

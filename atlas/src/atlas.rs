@@ -1,5 +1,8 @@
 use {
-    crate::pack::{self, Margin, Pack, Rect},
+    crate::{
+        indent::Indent,
+        pack::{self, Pack, Rect},
+    },
     png::{Error as ImageError, Format, Image},
     serde::Serialize,
     std::{collections::BTreeMap, fmt},
@@ -14,7 +17,7 @@ pub struct ImageData {
 ///
 /// # Errors
 /// See [`Error`] type for details.
-pub fn make(data: Vec<ImageData>, margin: Margin) -> Result<Atlas, Error> {
+pub fn make(data: Vec<ImageData>, margin: Indent) -> Result<Atlas, Error> {
     let mut sprites = decode_sprites(data)?;
     sprites.sort_unstable_by(|a, b| a.name.cmp(&b.name));
     Atlas::pack(sprites, margin)
@@ -35,7 +38,7 @@ pub struct Atlas {
 }
 
 impl Atlas {
-    fn pack(sprites: Vec<Sprite>, margin: Margin) -> Result<Self, Error> {
+    fn pack(sprites: Vec<Sprite>, margin: Indent) -> Result<Self, Error> {
         use std::iter;
 
         let entries: Vec<_> = sprites

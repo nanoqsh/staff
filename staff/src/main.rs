@@ -1,5 +1,5 @@
 use {
-    atlas::{Atlas, Error as AtlasError, ImageData, Map, Margin, TooLarge},
+    atlas::{Atlas, Error as AtlasError, ImageData, Indent, Map, TooLarge},
     clap::{Parser, Subcommand},
     color::{Color, Error as ColorError},
     convert::{Element, Error as ParseError, Parameters, Target, Value},
@@ -181,7 +181,7 @@ fn run(cli: Cli) -> Result<(), Error> {
             vm,
         } => {
             let data = read_sprites(sprites)?;
-            let margin = Margin::new(hm, vm)?;
+            let margin = Indent::new(hm, vm)?;
             let Atlas { png, map } = atlas::make(data, margin)?;
             let name = name.as_deref().unwrap_or(OUT_NAME);
             let outdir = make_outdir(outdir)?;
@@ -311,7 +311,7 @@ enum Error {
     WriteToFile(PathBuf),
     PalettePathNotSet,
     Atlas(AtlasError),
-    Margin(TooLarge),
+    Indent(TooLarge),
     Parse(ParseError),
     Color(ColorError),
     Json(JsonError),
@@ -325,7 +325,7 @@ impl From<AtlasError> for Error {
 
 impl From<TooLarge> for Error {
     fn from(v: TooLarge) -> Self {
-        Self::Margin(v)
+        Self::Indent(v)
     }
 }
 
@@ -357,7 +357,7 @@ impl fmt::Display for Error {
             Self::WriteToFile(path) => write!(f, "failed to write file {path:?}"),
             Self::PalettePathNotSet => write!(f, "the palette path is not set"),
             Self::Atlas(err) => write!(f, "{err}"),
-            Self::Margin(err) => write!(f, "{err}"),
+            Self::Indent(err) => write!(f, "{err}"),
             Self::Parse(err) => write!(f, "{err}"),
             Self::Color(err) => write!(f, "{err}"),
             Self::Json(err) => write!(f, "{err}"),
