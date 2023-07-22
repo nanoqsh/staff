@@ -10,7 +10,6 @@ pub use {
     action::Action,
     format::{Error as FormatError, Failed},
     mesh::{IndexOverflow, Mesh},
-    params::Parameters,
     parser::{parse, Element, Error, Value},
     skeleton::{Skeleton, ToManyBones},
     target::{Target, Unknown},

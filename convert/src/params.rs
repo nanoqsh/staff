@@ -4,7 +4,7 @@ thread_local! {
     static PARAMS: OnceCell<&'static Parameters> = const { OnceCell::new() };
 }
 
-pub struct Parameters {
+pub(crate) struct Parameters {
     pub verbose: bool,
     pub pos_fn: fn([f32; 3]) -> [f32; 3],
     pub map_fn: fn([f32; 2]) -> [f32; 2],

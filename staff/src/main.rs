@@ -2,7 +2,7 @@ use {
     atlas::{Atlas, Error as AtlasError, ImageData, Indent, Map, TooLarge},
     clap::{Parser, Subcommand},
     color::{Color, Error as ColorError},
-    convert::{Element, Error as ParseError, Parameters, Target, Value},
+    convert::{Element, Error as ParseError, Target, Value},
     serde_json::Error as JsonError,
     std::{
         env,
@@ -113,16 +113,6 @@ fn run(cli: Cli) -> Result<(), Error> {
     const PALETTE_NAME: &str = "palette";
     const OUT_NAME: &str = "out";
 
-    Parameters {
-        verbose: cli.verbose,
-        pos_fn: |vs| vs.map(update::<4>),
-        map_fn: |[u, v]| [u, 1. - v].map(update::<8>),
-        rot_fn: |vs| vs.map(update::<4>),
-        act_fn: |vs| vs.map(update::<4>),
-        bez_fn: |vs| vs.map(update::<4>),
-    }
-    .init();
-
     match cli.command {
         Cmd::Convert {
             target,
@@ -130,7 +120,7 @@ fn run(cli: Cli) -> Result<(), Error> {
             outdir,
         } => {
             let src = read_string(filepath)?;
-            let elements = convert::parse(&src, target)?;
+            let elements = convert::parse(&src, target, cli.verbose)?;
             if elements.is_empty() {
                 println!("no elements found");
                 return Ok(());
@@ -381,14 +371,4 @@ impl fmt::Display for Error {
             Self::Json(err) => write!(f, "{err}"),
         }
     }
-}
-
-fn update<const D: u32>(v: f32) -> f32 {
-    let a = u32::pow(10, D) as f32;
-    let mut v = (v * a).round() / a;
-    if v == -0. {
-        v = 0.;
-    }
-
-    v
 }

@@ -25,7 +25,9 @@ pub enum Value {
 ///
 /// # Errors
 /// See [`Error`] type for details.
-pub fn parse(src: &str, target: Target) -> Result<Vec<Element>, Error> {
+pub fn parse(src: &str, target: Target, verbose: bool) -> Result<Vec<Element>, Error> {
+    init_params(verbose);
+
     let mut output = vec![];
     let doc = read(src)?;
 
@@ -36,6 +38,28 @@ pub fn parse(src: &str, target: Target) -> Result<Vec<Element>, Error> {
     }
 
     Ok(output)
+}
+
+fn init_params(verbose: bool) {
+    fn update<const D: u32>(v: f32) -> f32 {
+        let a = u32::pow(10, D) as f32;
+        let mut v = (v * a).round() / a;
+        if v == -0. {
+            v = 0.;
+        }
+
+        v
+    }
+
+    Parameters {
+        verbose,
+        pos_fn: |vs| vs.map(update::<4>),
+        map_fn: |[u, v]| [u, 1. - v].map(update::<8>),
+        rot_fn: |vs| vs.map(update::<4>),
+        act_fn: |vs| vs.map(update::<4>),
+        bez_fn: |vs| vs.map(update::<4>),
+    }
+    .init();
 }
 
 fn parse_meshes(doc: Document, output: &mut Vec<Element>) -> Result<(), Error> {
