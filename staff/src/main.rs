@@ -1,6 +1,6 @@
 use {
-    atlas::{Atlas, Error as AtlasError, ImageData, Indent, Map, TooLarge},
-    clap::{Parser, Subcommand},
+    atlas::{Atlas, Error as AtlasError, ImageData, Indent, Map, Parameters, TooLarge},
+    clap::Parser,
     color::{Color, Error as ColorError},
     convert::{Element, Error as ParseError, Target, Value},
     serde_json::Error as JsonError,
@@ -16,18 +16,7 @@ use {
 };
 
 #[derive(Parser)]
-#[command(version, about)]
-struct Cli {
-    /// Enable verbore output
-    #[arg(short, long)]
-    verbose: bool,
-
-    #[command(subcommand)]
-    command: Cmd,
-}
-
-#[derive(Subcommand)]
-enum Cmd {
+enum Cli {
     /// Convert .dae objects to .json files
     Convert {
         /// Target object to parse (mesh|skeleton|action)
@@ -74,7 +63,7 @@ enum Cmd {
         /// Pathes of image sprites
         sprites: Vec<PathBuf>,
 
-        /// The atlas name ("out" by default)
+        /// The atlas name ("atlas" by default)
         #[arg(short, long)]
         name: Option<String>,
 
@@ -84,19 +73,19 @@ enum Cmd {
 
         /// Specify horizontal padding
         #[arg(long, default_value_t = 0)]
-        hp: u32,
+        xp: u32,
 
         /// Specify vertical padding
         #[arg(long, default_value_t = 0)]
-        vp: u32,
+        yp: u32,
 
         /// Specify horizontal margin
         #[arg(long, default_value_t = 0)]
-        hm: u32,
+        xm: u32,
 
         /// Specify vertical margin
         #[arg(long, default_value_t = 0)]
-        vm: u32,
+        ym: u32,
     },
 }
 
@@ -111,16 +100,15 @@ fn main() -> ExitCode {
 
 fn run(cli: Cli) -> Result<(), Error> {
     const PALETTE_NAME: &str = "palette";
-    const OUT_NAME: &str = "out";
 
-    match cli.command {
-        Cmd::Convert {
+    match cli {
+        Cli::Convert {
             target,
             filepath,
             outdir,
         } => {
             let src = read_string(filepath)?;
-            let elements = convert::parse(&src, target, cli.verbose)?;
+            let elements = convert::parse(&src, target)?;
             if elements.is_empty() {
                 println!("no elements found");
                 return Ok(());
@@ -129,7 +117,7 @@ fn run(cli: Cli) -> Result<(), Error> {
             let outdir = make_outdir(outdir)?;
             serialize_elements(&elements, &outdir)
         }
-        Cmd::Collect {
+        Cli::Collect {
             filepath,
             name,
             outdir,
@@ -145,7 +133,7 @@ fn run(cli: Cli) -> Result<(), Error> {
             let outdir = make_outdir(outdir)?;
             serialize_colors(&colors, name, &outdir)
         }
-        Cmd::Repaint {
+        Cli::Repaint {
             imagepath,
             palettepath,
             name,
@@ -167,31 +155,29 @@ fn run(cli: Cli) -> Result<(), Error> {
             };
 
             let png = color::repaint(&data, &palette)?;
-            let name = name.as_deref().unwrap_or(OUT_NAME);
+            let name = name.as_deref().unwrap_or("out");
             let outdir = make_outdir(outdir)?;
             write_png(&png, name, &outdir)
         }
-        Cmd::Atlas {
+        Cli::Atlas {
             sprites,
             name,
             outdir,
-            hm,
-            vm,
-            hp,
-            vp,
+            xm,
+            ym,
+            xp,
+            yp,
         } => {
-            use atlas::Parameters;
-
             let data = read_sprites(sprites)?;
             let Atlas { png, map } = atlas::make(
                 data,
                 Parameters {
-                    padding: Indent::new(hp, vp)?,
-                    margin: Indent::new(hm, vm)?,
+                    padding: Indent::new(xp, yp)?,
+                    margin: Indent::new(xm, ym)?,
                 },
             )?;
 
-            let name = name.as_deref().unwrap_or(OUT_NAME);
+            let name = name.as_deref().unwrap_or("atlas");
             let outdir = make_outdir(outdir)?;
             write_png(&png, name, &outdir)?;
             serialize_map(&map, name, &outdir)

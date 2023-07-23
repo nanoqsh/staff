@@ -3,7 +3,7 @@ use {
         action::{Action, Channel, Interpolation, Rotation},
         format::{read, Document, Failed, Name, Node},
         mesh::{IndexOverflow, Mesh, Vert},
-        params::{verbose, Parameters},
+        params::Parameters,
         skeleton::{Bone, Skeleton, ToManyBones},
         target::Target,
     },
@@ -25,8 +25,8 @@ pub enum Value {
 ///
 /// # Errors
 /// See [`Error`] type for details.
-pub fn parse(src: &str, target: Target, verbose: bool) -> Result<Vec<Element>, Error> {
-    init_params(verbose);
+pub fn parse(src: &str, target: Target) -> Result<Vec<Element>, Error> {
+    init_params();
 
     let mut output = vec![];
     let doc = read(src)?;
@@ -40,7 +40,7 @@ pub fn parse(src: &str, target: Target, verbose: bool) -> Result<Vec<Element>, E
     Ok(output)
 }
 
-fn init_params(verbose: bool) {
+fn init_params() {
     fn update<const D: u32>(v: f32) -> f32 {
         let a = u32::pow(10, D) as f32;
         let mut v = (v * a).round() / a;
@@ -52,7 +52,6 @@ fn init_params(verbose: bool) {
     }
 
     Parameters {
-        verbose,
         pos_fn: |vs| vs.map(update::<4>),
         map_fn: |[u, v]| [u, 1. - v].map(update::<8>),
         rot_fn: |vs| vs.map(update::<4>),
@@ -65,7 +64,7 @@ fn init_params(verbose: bool) {
 fn parse_meshes(doc: Document, output: &mut Vec<Element>) -> Result<(), Error> {
     let params = Parameters::get();
     for geom in doc.geometry {
-        verbose!("read {} ({}) .. ", geom.name, geom.id);
+        println!("read {} ({}) .. ", geom.name, geom.id);
 
         let mut verts = vec![];
         let mut positions_floats = vec![];
@@ -178,7 +177,7 @@ fn parse_skeletons(doc: Document, output: &mut Vec<Element>) -> Result<(), Error
     }
 
     for node in doc.nodes {
-        verbose!("read {} ({}) .. ", node.name, node.id);
+        println!("read {} ({}) .. ", node.name, node.id);
 
         let name = node.name.clone();
         let mut sk = Skeleton::default();
@@ -188,7 +187,7 @@ fn parse_skeletons(doc: Document, output: &mut Vec<Element>) -> Result<(), Error
         visit_node(node, None, &mut sk)?;
 
         if sk.is_empty() {
-            verbose!("skipped {name}");
+            println!("skipped {name}");
             continue;
         }
 
@@ -219,7 +218,7 @@ fn parse_actions(doc: Document, output: &mut Vec<Element>) -> Result<(), Error> 
             continue;
         }
 
-        verbose!("read {} ({}) .. ", anim.name, anim.id);
+        println!("read {} ({}) .. ", anim.name, anim.id);
 
         let (chan, bone) = {
             let mut parts = anim.id.rsplit("___");
@@ -280,7 +279,7 @@ fn parse_actions(doc: Document, output: &mut Vec<Element>) -> Result<(), Error> 
     }
 
     if action.is_empty() {
-        verbose!("skipped action");
+        println!("skipped action");
     }
 
     output.push(Element {

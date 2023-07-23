@@ -5,7 +5,6 @@ thread_local! {
 }
 
 pub(crate) struct Parameters {
-    pub verbose: bool,
     pub pos_fn: fn([f32; 3]) -> [f32; 3],
     pub map_fn: fn([f32; 2]) -> [f32; 2],
     pub rot_fn: fn([f32; 4]) -> [f32; 4],
@@ -36,14 +35,3 @@ impl Parameters {
         }
     }
 }
-
-macro_rules! verbose {
-    ($e:literal) => { verbose!($e,) };
-    ($e:literal, $( $t:expr ),* $( , )?) => {
-        if Parameters::get().verbose {
-            println!($e, $( $t ),*);
-        }
-    };
-}
-
-pub(crate) use verbose;
