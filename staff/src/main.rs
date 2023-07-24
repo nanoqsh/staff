@@ -5,6 +5,7 @@ use {
     convert::{Element, Error as ParseError, Target, Value},
     serde_json::Error as JsonError,
     std::{
+        collections::HashMap,
         env,
         ffi::OsStr,
         fmt,
@@ -70,6 +71,10 @@ enum Cli {
         /// Specify output directory (current by default)
         #[arg(short, long)]
         outdir: Option<PathBuf>,
+
+        /// Specify map naming file ("names.json" by default)
+        #[arg(long)]
+        names: Option<PathBuf>,
 
         /// Specify horizontal padding
         #[arg(long, default_value_t = 0)]
@@ -163,17 +168,26 @@ fn run(cli: Cli) -> Result<(), Error> {
             sprites,
             name,
             outdir,
+            names,
             xm,
             ym,
             xp,
             yp,
         } => {
             let data = read_sprites(sprites)?;
+            let names_path = names.unwrap_or_else(|| PathBuf::from("names.json"));
             let Atlas { png, map } = atlas::make(
                 data,
-                Parameters {
+                &Parameters {
                     padding: Indent::new(xp, yp)?,
                     margin: Indent::new(xm, ym)?,
+                    names: match read_string(Some(names_path)) {
+                        Ok(s) => {
+                            println!("the name mapping has been applied");
+                            serde_json::from_str(&s)?
+                        }
+                        Err(_) => HashMap::default(),
+                    },
                 },
             )?;
 

@@ -1,13 +1,7 @@
-use {crate::indent::Indent, serde::Serialize};
+use {crate::atlas::Parameters, serde::Serialize};
 
 type Size = (u32, u32);
 type Point = (u32, u32);
-
-#[derive(Clone, Copy)]
-pub struct Parameters {
-    pub padding: Indent,
-    pub margin: Indent,
-}
 
 #[derive(Clone, Copy, Serialize)]
 #[serde(into = "[u32; 4]")]
@@ -38,7 +32,7 @@ pub(crate) struct Pack {
     pub side: u32,
 }
 
-pub(crate) fn pack(entries: &[Size], params: Parameters) -> Pack {
+pub(crate) fn pack(entries: &[Size], params: &Parameters) -> Pack {
     let mut side = initial_side(entries);
     loop {
         match try_pack(entries, side, params) {
@@ -63,8 +57,11 @@ fn initial_side(entries: &[Size]) -> u32 {
     u32::max(side, MIN_INITIAL_SIDE)
 }
 
-fn try_pack(entries: &[Size], side: u32, params: Parameters) -> Option<Vec<Rect>> {
-    let Parameters { padding, margin } = params;
+fn try_pack(entries: &[Size], side: u32, params: &Parameters) -> Option<Vec<Rect>> {
+    let &Parameters {
+        padding, margin, ..
+    } = params;
+
     let xoffset = padding.horizontal + margin.horizontal;
     let yoffset = padding.vertical + margin.vertical;
     let mut x = xoffset;

@@ -1,8 +1,14 @@
 use {
-    crate::pack::{self, Pack, Parameters, Rect},
+    crate::{
+        indent::Indent,
+        pack::{self, Pack, Rect},
+    },
     im::{Error as ImageError, Format, Image},
     serde::Serialize,
-    std::{collections::BTreeMap, fmt},
+    std::{
+        collections::{BTreeMap, HashMap},
+        fmt,
+    },
 };
 
 pub struct ImageData {
@@ -10,20 +16,31 @@ pub struct ImageData {
     pub data: Vec<u8>,
 }
 
+type Name = Box<str>;
+
+pub struct Parameters {
+    pub names: HashMap<Name, Name>,
+    pub padding: Indent,
+    pub margin: Indent,
+}
+
 /// Make an atlas from images.
 ///
 /// # Errors
 /// See [`Error`] type for details.
-pub fn make(data: Vec<ImageData>, params: Parameters) -> Result<Atlas, Error> {
-    let mut sprites = decode_sprites(data)?;
+pub fn make(data: Vec<ImageData>, params: &Parameters) -> Result<Atlas, Error> {
+    let mut sprites = decode_sprites(data, &params.names)?;
     sprites.sort_unstable_by(|a, b| a.name.cmp(&b.name));
     Atlas::pack(sprites, params)
 }
 
-fn decode_sprites(data: Vec<ImageData>) -> Result<Vec<Sprite>, Error> {
+fn decode_sprites(data: Vec<ImageData>, names: &HashMap<Name, Name>) -> Result<Vec<Sprite>, Error> {
     data.into_iter()
         .map(|ImageData { name, data }| match im::decode_png(&data) {
-            Ok(image) => Ok(Sprite { image, name }),
+            Ok(image) => {
+                let name = names.get(&name).cloned().unwrap_or(name);
+                Ok(Sprite { image, name })
+            }
             Err(err) => Err(Error { err, name }),
         })
         .collect()
@@ -35,7 +52,7 @@ pub struct Atlas {
 }
 
 impl Atlas {
-    fn pack(sprites: Vec<Sprite>, params: Parameters) -> Result<Self, Error> {
+    fn pack(sprites: Vec<Sprite>, params: &Parameters) -> Result<Self, Error> {
         use std::iter;
 
         let entries: Vec<_> = sprites
