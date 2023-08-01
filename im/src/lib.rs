@@ -17,6 +17,16 @@ pub enum Format {
     Rgba = 4,
 }
 
+impl fmt::Display for Format {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Gray => write!(f, "gray"),
+            Self::Rgb => write!(f, "rgb"),
+            Self::Rgba => write!(f, "rgba"),
+        }
+    }
+}
+
 impl From<Format> for ColorType {
     fn from(format: Format) -> Self {
         match format {

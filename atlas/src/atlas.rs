@@ -47,6 +47,7 @@ fn decode_sprites(data: Vec<ImageData>, names: &HashMap<Name, Name>) -> Result<V
 }
 
 pub struct Atlas {
+    pub format: Format,
     pub png: Vec<u8>,
     pub map: Map,
 }
@@ -81,6 +82,7 @@ impl Atlas {
         }
 
         Ok(Self {
+            format,
             png: im::encode_png(&map)?,
             map: Map(sprites
                 .into_iter()

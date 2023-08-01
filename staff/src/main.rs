@@ -176,7 +176,7 @@ fn run(cli: Cli) -> Result<(), Error> {
         } => {
             let data = read_sprites(sprites)?;
             let names_path = names.unwrap_or_else(|| PathBuf::from("names.json"));
-            let Atlas { png, map } = atlas::make(
+            let Atlas { png, map, format } = atlas::make(
                 data,
                 &Parameters {
                     padding: Indent::new(xp, yp)?,
@@ -191,6 +191,7 @@ fn run(cli: Cli) -> Result<(), Error> {
                 },
             )?;
 
+            println!("the atlas packed with {format} format");
             let name = name.as_deref().unwrap_or("atlas");
             let outdir = make_outdir(outdir)?;
             write_png(&png, name, &outdir)?;
