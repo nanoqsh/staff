@@ -70,7 +70,6 @@ impl Image {
         }
     }
 
-    #[must_use]
     pub fn format(&self) -> Format {
         match self {
             Self::Gray(_) => Format::Gray,
@@ -79,7 +78,6 @@ impl Image {
         }
     }
 
-    #[must_use]
     pub fn dimensions(&self) -> (u32, u32) {
         match self {
             Self::Gray(im) => im.dimensions(),
@@ -103,7 +101,6 @@ impl Image {
         copied.expect("copy image");
     }
 
-    #[must_use]
     pub fn into_gray(self) -> GrayImage {
         match self {
             Self::Gray(im) => im,
@@ -112,7 +109,6 @@ impl Image {
         }
     }
 
-    #[must_use]
     pub fn into_rgb(self) -> RgbImage {
         match self {
             Self::Gray(im) => DynamicImage::from(im).into_rgb8(),
@@ -121,7 +117,6 @@ impl Image {
         }
     }
 
-    #[must_use]
     pub fn into_rgba(self) -> RgbaImage {
         match self {
             Self::Gray(im) => DynamicImage::from(im).into_rgba8(),

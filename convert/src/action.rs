@@ -29,7 +29,6 @@ impl Action {
         self.keyframes.is_empty()
     }
 
-    #[must_use]
     pub fn keyframes(&self) -> &Keyframes {
         &self.keyframes
     }

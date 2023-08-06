@@ -27,7 +27,6 @@ impl Parameters {
     ///
     /// # Panics
     /// Panics if global parameters isn't set.
-    #[must_use]
     pub fn get() -> &'static Self {
         match PARAMS.with(|params| params.get().copied()) {
             Some(val) => val,

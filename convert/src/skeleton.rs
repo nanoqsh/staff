@@ -27,7 +27,6 @@ impl Skeleton {
         self.names.get(name).copied()
     }
 
-    #[must_use]
     pub fn bones(&self) -> &[Bone] {
         &self.bones
     }
