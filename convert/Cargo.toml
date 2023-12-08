@@ -7,3 +7,6 @@ edition = "2021"
 glam = "0.24"
 quick-xml = "0.29"
 serde = { workspace = true }
+
+[lints]
+workspace = true

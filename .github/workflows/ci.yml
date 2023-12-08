@@ -20,24 +20,6 @@ jobs:
           - name: Build
             run: cargo build --verbose
           - name: Clippy
-            run: >
-                cargo clippy --
-                -W clippy::use_self
-                -W clippy::pedantic
-                -W clippy::unwrap_used
-                -W clippy::perf
-                -W clippy::missing_assert_message
-                -A clippy::needless_collect
-                -A clippy::cast_precision_loss
-                -A clippy::cast_sign_loss
-                -A clippy::cast_possible_truncation
-                -A clippy::cast_lossless
-                -A clippy::wildcard_imports
-                -A clippy::module_name_repetitions
-                -A clippy::many_single_char_names
-                -A clippy::too_many_lines
-                -A clippy::similar_names
-                -A clippy::must_use_candidate
-
+            run: cargo clippy
           - name: Tests
             run: cargo test --verbose

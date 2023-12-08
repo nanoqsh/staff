@@ -7,3 +7,6 @@ edition = "2021"
 im = { path = "../im" }
 palette = { version = "0.7", default-features = false, features = ["std"] }
 serde = { workspace = true }
+
+[lints]
+workspace = true

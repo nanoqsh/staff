@@ -5,3 +5,6 @@ edition = "2021"
 
 [dependencies]
 image = { version = "0.24", default-features = false, features = ["png"] }
+
+[lints]
+workspace = true

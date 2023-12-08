@@ -7,9 +7,12 @@ edition = "2021"
 atlas = { path = "../atlas" }
 color = { path = "../color" }
 convert = { path = "../convert" }
-clap = { version = "4.1", default-features = false, features = [
-    "derive",
-    "help",
-    "std",
-] }
 serde_json = "1.0"
+
+[dependencies.clap]
+version = "4.1"
+default-features = false
+features = ["derive", "help", "std"]
+
+[lints]
+workspace = true
