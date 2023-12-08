@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 glam = "0.24"
-quick-xml = "0.29"
+quick-xml = "0.31"
 serde = { workspace = true }
 
 [lints]
