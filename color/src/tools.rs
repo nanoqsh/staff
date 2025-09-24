@@ -1,5 +1,5 @@
 use {
-    crate::{color::Color, palette::Palette},
+    crate::{color::Color, palette::Closest},
     im::{Error as ImageError, Image, Rgb},
     std::{collections::HashSet, fmt},
 };
@@ -25,14 +25,16 @@ pub fn collect(data: &[u8]) -> Result<Vec<Color>, Error> {
 /// # Errors
 /// See [`Error`] for details.
 pub fn repaint(data: &[u8], colors: &[Color]) -> Result<Vec<u8>, Error> {
-    let mut palette = Palette::new(colors);
-    if palette.is_empty() {
+    if colors.is_empty() {
         return Err(Error::EmptyPalette);
     }
 
+    let mut palette = Closest::new(colors);
+
     let mut im = im::decode_png(data)?.into_rgb();
     for Rgb(rgb) in im.pixels_mut() {
-        let Color(new) = palette.closest(Color(*rgb));
+        let target = Color(*rgb);
+        let Color(new) = palette.transfer(target);
         *rgb = new;
     }
 
@@ -44,6 +46,7 @@ pub fn repaint(data: &[u8], colors: &[Color]) -> Result<Vec<u8>, Error> {
 pub enum Error {
     Image(ImageError),
     EmptyPalette,
+    TranferFailed(Color),
 }
 
 impl From<ImageError> for Error {
@@ -57,6 +60,7 @@ impl fmt::Display for Error {
         match self {
             Self::Image(err) => write!(f, "{err}"),
             Self::EmptyPalette => write!(f, "empty palette"),
+            Self::TranferFailed(col) => write!(f, "failed to transfer color {col}"),
         }
     }
 }

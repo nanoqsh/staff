@@ -4,12 +4,12 @@ use {
     std::collections::HashMap,
 };
 
-pub(crate) struct Palette {
+pub(crate) struct Closest {
     colors: Vec<Lab>,
     cache: HashMap<Color, Color>,
 }
 
-impl Palette {
+impl Closest {
     pub fn new(colors: &[Color]) -> Self {
         Self {
             colors: colors
@@ -20,11 +20,7 @@ impl Palette {
         }
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.colors.is_empty()
-    }
-
-    pub fn closest(&mut self, target: Color) -> Color {
+    pub fn transfer(&mut self, target: Color) -> Color {
         *self.cache.entry(target).or_insert_with(|| {
             let target = {
                 let Color([r, g, b]) = target;

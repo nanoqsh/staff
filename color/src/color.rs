@@ -1,11 +1,32 @@
 use {
     serde::{Deserialize, Serialize},
-    std::fmt,
+    std::fmt::{self, Write},
 };
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 #[serde(try_from = "&str", into = "String")]
 pub struct Color(pub(crate) [u8; 3]);
+
+impl fmt::Display for Color {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fn to_hex(v: u8) -> u8 {
+            match v {
+                0..=9 => b'0' + v,
+                10..=15 => b'A' + v - 10,
+                _ => unreachable!(),
+            }
+        }
+
+        for byte in self.0 {
+            let a = byte >> 4;
+            let b = byte & 0b1111;
+            f.write_char(to_hex(a) as char)?;
+            f.write_char(to_hex(b) as char)?;
+        }
+
+        Ok(())
+    }
+}
 
 impl<'a> TryFrom<&'a str> for Color {
     type Error = ParseError<'a>;
@@ -38,23 +59,7 @@ impl<'a> TryFrom<&'a str> for Color {
 
 impl From<Color> for String {
     fn from(col: Color) -> Self {
-        fn to_hex(v: u8) -> u8 {
-            match v {
-                0..=9 => b'0' + v,
-                10..=15 => b'A' + v - 10,
-                _ => unreachable!(),
-            }
-        }
-
-        let mut s = Self::with_capacity(6);
-        for byte in col.0 {
-            let a = byte >> 4;
-            let b = byte & 0b1111;
-            s.push(to_hex(a) as char);
-            s.push(to_hex(b) as char);
-        }
-
-        s
+        col.to_string()
     }
 }
 
