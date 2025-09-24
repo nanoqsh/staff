@@ -42,6 +42,10 @@ enum Cli {
         /// Specify output directory (current by default)
         #[arg(short, long)]
         outdir: Option<PathBuf>,
+
+        /// Sort palette colors
+        #[arg(long, default_value_t = false)]
+        sort: bool,
     },
     /// Repaint .png image with given .json palette
     Repaint {
@@ -130,9 +134,10 @@ fn run(cli: Cli) -> Result<(), Error> {
             filepath,
             name,
             outdir,
+            sort,
         } => {
             let data = read_data(filepath)?;
-            let colors = color::collect(&data)?;
+            let colors = color::collect(&data, sort)?;
             if colors.is_empty() {
                 println!("no colors found");
                 return Ok(());

@@ -11,16 +11,22 @@ use {
 ///
 /// # Errors
 /// See [`Error`] for details.
-pub fn collect(data: &[u8]) -> Result<Vec<Color>, Error> {
+pub fn collect(data: &[u8], sort: bool) -> Result<Vec<Color>, Error> {
     let im = im::decode_png(data)?.into_rgb();
     let mut colors = HashSet::new();
+    let mut out = vec![];
     for Rgb(rgb) in im.pixels() {
-        colors.insert(Color(*rgb));
+        let col = Color(*rgb);
+        if colors.insert(col) {
+            out.push(col);
+        }
     }
 
-    let mut colors: Vec<_> = colors.into_iter().collect();
-    colors.sort_unstable();
-    Ok(colors)
+    if sort {
+        out.sort_unstable();
+    }
+
+    Ok(out)
 }
 
 pub enum RepaintMode<'palette> {
