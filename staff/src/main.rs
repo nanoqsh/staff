@@ -1,7 +1,7 @@
 use {
     atlas::{Atlas, Error as AtlasError, ImageData, Indent, Map, Parameters, TooLarge},
     clap::Parser,
-    color::{Color, Error as ColorError},
+    color::{Color, Error as ColorError, RepaintMode},
     convert::{Element, Error as ParseError, Target, Value},
     serde_json::Error as JsonError,
     std::{
@@ -50,6 +50,10 @@ enum Cli {
 
         /// Palette path (palette.json by default)
         palettepath: Option<PathBuf>,
+
+        /// Path to palette of new colors
+        #[arg(short, long)]
+        mappath: Option<PathBuf>,
 
         /// New image name ("out" by default)
         #[arg(short, long)]
@@ -141,11 +145,12 @@ fn run(cli: Cli) -> Result<(), Error> {
         Cli::Repaint {
             imagepath,
             palettepath,
+            mappath,
             name,
             outdir,
         } => {
             let data = read_data(imagepath)?;
-            let palette: Vec<Color> = {
+            let colors: Vec<Color> = {
                 let path = palettepath
                     .or_else(|| {
                         let mut curr = env::current_dir().ok()?;
@@ -159,7 +164,20 @@ fn run(cli: Cli) -> Result<(), Error> {
                 serde_json::from_str(&src)?
             };
 
-            let png = color::repaint(&data, &palette)?;
+            let to = mappath
+                .map(|path| -> Result<Vec<Color>, Error> {
+                    let src = read_string(Some(path))?;
+                    let colors = serde_json::from_str(&src)?;
+                    Ok(colors)
+                })
+                .transpose()?;
+
+            let mode = match &to {
+                Some(to) => RepaintMode::Exact { from: &colors, to },
+                None => RepaintMode::Closest { colors: &colors },
+            };
+
+            let png = color::repaint(&data, mode)?;
             let name = name.as_deref().unwrap_or("out");
             let outdir = make_outdir(outdir)?;
             write_png(&png, name, &outdir)

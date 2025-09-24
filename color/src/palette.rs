@@ -1,8 +1,24 @@
 use {
     crate::color::Color,
     palette::{color_difference::Ciede2000, convert::IntoColorUnclamped, Lab, LinSrgb, Srgb},
-    std::collections::HashMap,
+    std::{collections::HashMap, iter},
 };
+
+pub(crate) struct Exact {
+    transfer: HashMap<Color, Color>,
+}
+
+impl Exact {
+    pub fn new(from: &[Color], to: &[Color]) -> Self {
+        Self {
+            transfer: iter::zip(from, to).map(|(&f, &t)| (f, t)).collect(),
+        }
+    }
+
+    pub fn transfer(&mut self, target: Color) -> Option<Color> {
+        self.transfer.get(&target).copied()
+    }
+}
 
 pub(crate) struct Closest {
     colors: Vec<Lab>,

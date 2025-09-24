@@ -4,5 +4,5 @@ mod tools;
 
 pub use crate::{
     color::Color,
-    tools::{collect, repaint, Error},
+    tools::{collect, repaint, Error, RepaintMode},
 };

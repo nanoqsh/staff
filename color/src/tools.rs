@@ -1,5 +1,8 @@
 use {
-    crate::{color::Color, palette::Closest},
+    crate::{
+        color::Color,
+        palette::{Closest, Exact},
+    },
     im::{Error as ImageError, Image, Rgb},
     std::{collections::HashSet, fmt},
 };
@@ -20,21 +23,44 @@ pub fn collect(data: &[u8]) -> Result<Vec<Color>, Error> {
     Ok(colors)
 }
 
+pub enum RepaintMode<'palette> {
+    Closest {
+        colors: &'palette [Color],
+    },
+    Exact {
+        from: &'palette [Color],
+        to: &'palette [Color],
+    },
+}
+
 /// Repaints the png image with given palette colors.
 ///
 /// # Errors
 /// See [`Error`] for details.
-pub fn repaint(data: &[u8], colors: &[Color]) -> Result<Vec<u8>, Error> {
-    if colors.is_empty() {
-        return Err(Error::EmptyPalette);
-    }
+pub fn repaint(data: &[u8], mode: RepaintMode<'_>) -> Result<Vec<u8>, Error> {
+    let transfer: &mut dyn FnMut(_) -> _ = match mode {
+        RepaintMode::Closest { colors } => {
+            if colors.is_empty() {
+                return Err(Error::EmptyPalette);
+            }
 
-    let mut palette = Closest::new(colors);
+            let mut palette = Closest::new(colors);
+            &mut move |target| Some(palette.transfer(target))
+        }
+        RepaintMode::Exact { from, to } => {
+            if from.is_empty() || to.is_empty() {
+                return Err(Error::EmptyPalette);
+            }
+
+            let mut palette = Exact::new(from, to);
+            &mut move |target| palette.transfer(target)
+        }
+    };
 
     let mut im = im::decode_png(data)?.into_rgb();
     for Rgb(rgb) in im.pixels_mut() {
         let target = Color(*rgb);
-        let Color(new) = palette.transfer(target);
+        let Color(new) = transfer(target).ok_or(Error::TranferFailed(target))?;
         *rgb = new;
     }
 
